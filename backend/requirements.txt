@@ -1,0 +1,94 @@
+# Wikforge backend Python dependencies
+# Keep this file in sync with [project.dependencies] in pyproject.toml.
+# Versions use lower bounds with safe upper bounds to avoid major-version breaks.
+
+# ---------- Web framework ----------
+fastapi>=0.115,<0.117
+uvicorn[standard]>=0.34,<0.36
+starlette>=0.41,<0.48
+pydantic>=2.10,<3.0
+pydantic-settings>=2.7,<3.0
+email-validator>=2.2,<3.0
+python-multipart>=0.0.20,<0.1
+
+# ---------- Database / ORM ----------
+sqlalchemy[asyncio]>=2.0.36,<3.0
+asyncpg>=0.30,<0.31
+psycopg2-binary>=2.9,<3.0
+alembic>=1.14,<2.0
+
+# ---------- Cache / Queue ----------
+redis>=5.2,<6.0
+celery[redis]>=5.4,<6.0
+
+# ---------- Auth ----------
+python-jose[cryptography]>=3.3,<4.0
+passlib[bcrypt]>=1.7.4,<2.0
+bcrypt>=4.2,<5.0
+authlib>=1.4,<2.0
+
+# ---------- Object storage ----------
+boto3>=1.36,<2.0
+minio>=7.2,<8.0
+
+# ---------- Search engines ----------
+opensearch-py>=2.8,<3.0
+# qdrant-client 1.15+ 删除了 client.search() 方法 (改 query_points), 项目代码仍在用 search;
+# 在重构 search_service 之前固定到兼容版本。
+qdrant-client>=1.12,<1.15
+
+# ---------- Document parsing ----------
+marker-pdf>=1.3,<2.0
+pypdfium2>=4.30,<5.0
+pymupdf>=1.24,<2.0
+pypdf>=5.1,<6.0
+pdf2image>=1.17,<2.0
+python-docx>=1.1,<2.0
+python-pptx>=1.0,<2.0
+trafilatura>=2.0,<3.0
+beautifulsoup4>=4.12,<5.0
+lxml>=5.3,<6.0
+pillow>=10.4,<12.0
+pytesseract>=0.3.13,<0.4
+markdown>=3.7,<4.0
+
+# ---------- NLP / Chunking ----------
+tiktoken>=0.8,<1.0
+langchain-text-splitters>=0.3,<0.4
+jieba>=0.42,<0.43
+
+# ---------- LLM gateway ----------
+litellm>=1.55,<2.0
+
+# ---------- HTTP clients ----------
+httpx>=0.28,<0.29
+requests>=2.32,<3.0
+aiofiles>=24.1,<25.0
+
+# ---------- Utilities ----------
+python-dotenv>=1.0,<2.0
+tenacity>=9.0,<10.0
+structlog>=24.4,<26.0
+
+# ---------- Dev / Test (install via `pip install -e .[dev]` preferred) ----------
+pytest>=8.3,<9.0
+pytest-asyncio>=0.25,<0.26
+pytest-cov>=6.0,<7.0
+hypothesis>=6.122,<7.0
+testcontainers>=4.9,<5.0
+ruff>=0.9,<1.0
+mypy>=1.14,<2.0
+
+# ---------- Monitoring (optional) ----------
+# flower runs as a separate container; install via `pip install -e .[monitoring]` when needed.
+# flower>=2.0,<3.0
+
+# ---------- System metrics ----------
+# 用于 /api/admin/monitoring 端点采集 CPU / 内存 / 磁盘使用率
+psutil>=6.0,<8.0
+
+# ---------- Cross-Encoder reranker ----------
+# 用于 SearchService._cross_encoder_rerank 的真实重排
+# (BAAI/bge-reranker-base 模型权重首次启动时下载, ~400MB)
+# 不装时 SearchService 自动降级到 bigram fallback (检索精度 -10~20%)
+sentence-transformers>=3.0,<5.0

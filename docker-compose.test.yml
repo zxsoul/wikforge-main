@@ -1,0 +1,92 @@
+# 集成测试 Docker Compose 配置（任务 25.1）
+#
+# 用途：提供集成测试所需的最小依赖栈，与 docker-compose.yml 完全隔离：
+#   - 所有容器使用 *-test 命名后缀，避免与开发栈冲突
+#   - 端口段统一前缀 1xxxx，避免与默认端口冲突
+#   - 使用临时卷（tmpfs），测试结束后数据自动清理
+#   - 不启动 api / worker / frontend，由 pytest 直接驱动
+#
+# 用法：
+#   docker compose -f docker-compose.test.yml up -d
+#   pytest backend/tests/integration -m integration
+#   docker compose -f docker-compose.test.yml down -v
+
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: wikforge-postgres-test
+    environment:
+      POSTGRES_USER: wikforge_test
+      POSTGRES_PASSWORD: wikforge_test_secret
+      POSTGRES_DB: wikforge_test
+    ports:
+      - "15432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wikforge_test"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  redis-test:
+    image: redis:7-alpine
+    container_name: wikforge-redis-test
+    ports:
+      - "16379:6379"
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  opensearch-test:
+    image: opensearchproject/opensearch:2.17.1
+    container_name: wikforge-opensearch-test
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_JAVA_OPTS=-Xms256m -Xmx256m
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=Test@12345
+      - plugins.security.disabled=true
+    ports:
+      - "19200:9200"
+    tmpfs:
+      - /usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  qdrant-test:
+    image: qdrant/qdrant:v1.12.4
+    container_name: wikforge-qdrant-test
+    ports:
+      - "16333:6333"
+    tmpfs:
+      - /qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/healthz || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  minio-test:
+    image: minio/minio:latest
+    container_name: wikforge-minio-test
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 10s
+      retries: 5

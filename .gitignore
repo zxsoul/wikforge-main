@@ -1,0 +1,103 @@
+# =============================================================================
+# Wikforge .gitignore
+# 1. 凭证 / 密钥 / 本地配置 一律不入库 (拷贝 .env.example 为 .env 后填本地值)
+# 2. 大体积构建产物 / 缓存 不入库
+# 3. IDE / 系统垃圾文件 不入库
+# =============================================================================
+
+# ─── Secrets & local config ─────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+backups/
+# git-filter-repo 替换规则文件 (含真实敏感字符串, 跑完务必删)
+.git-replacements*.txt
+.git-rewrites*.txt
+
+# ─── Python ─────────────────────────────────────────────────────────
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+
+# ─── Node / Next.js ─────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+.turbo/
+.pnpm-store/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ─── Frontend test / e2e artifacts ──────────────────────────────────
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+
+# ─── Docker volumes (本地开发产物, 容器卷不应入库) ────────────────────
+postgres_data/
+opensearch_data/
+qdrant_data/
+minio_data/
+redis_data/
+litellm_data/
+
+# ─── Logs ───────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ─── IDE / Editor ───────────────────────────────────────────────────
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.shared.json
+*.swp
+*.swo
+*~
+.cursorrules
+
+# ─── macOS / Windows / Linux 系统垃圾 ─────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+desktop.ini
+
+# ─── 杂项 ───────────────────────────────────────────────────────────
+*.tmp
+*.bak
+*.old
+tmp/
+.cache/
+
+# ─── Kiro 任务跟踪 (可选: 如果团队共享则不忽略) ─────────────────────
+# .kiro/
+backend/celerybeat-schedule
+backups/

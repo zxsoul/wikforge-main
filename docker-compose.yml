@@ -1,0 +1,381 @@
+services:
+  # --- Infrastructure Services ---
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: wikforge-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wikforge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wikforge_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-wikforge}
+      LITELLM_DB: ${LITELLM_DB:-litellm}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wikforge}"]
+      interval: 30s
+      timeout: 60s
+      retries: 3
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: wikforge-redis
+    # AOF 持久化: every-second 同步, 重启不丢任务队列 / 会话状态
+    # 内网部署默认无密码 (容器网络已隔离); 公网部署务必通过 .env 设置 REDIS_PASSWORD
+    # 并同步更新 litellm/config.yaml 的 cache_params (LiteLLM 走单独连接)
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --auto-aof-rewrite-percentage 100
+      --auto-aof-rewrite-min-size 64mb
+      ${REDIS_PASSWORD:+--requirepass ${REDIS_PASSWORD}}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ${REDIS_PASSWORD:+-a $$REDIS_PASSWORD --no-auth-warning} ping | grep -q PONG"]
+      interval: 30s
+      timeout: 60s
+      retries: 3
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    restart: unless-stopped
+
+  opensearch:
+    build:
+      context: ./opensearch
+      dockerfile: Dockerfile
+    image: wikforge-opensearch:2.17.1-ik
+    container_name: wikforge-opensearch
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_PASSWORD:-Admin@123}
+      - plugins.security.disabled=true
+    ports:
+      - "${OPENSEARCH_PORT:-9200}:9200"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 60s
+      retries: 3
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.14.1
+    container_name: wikforge-qdrant
+    # 默认不开 API key 鉴权 (内网信任)。
+    # 需要开启时, 取消下面 environment 注释, 并在 .env 设置 QDRANT_API_KEY=<your-key>。
+    # 注意: Qdrant 1.12 把空字符串视为 key="", 客户端不带 key 仍会 401, 所以默认全部关闭。
+    # environment:
+    #   QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      # qdrant 镜像不含 curl/wget,改用 bash 内置 /dev/tcp 探活 6333 端口
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/6333' 2>/dev/null || exit 1"]
+      interval: 30s
+      timeout: 60s
+      retries: 3
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: wikforge-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 60s
+      retries: 3
+    restart: unless-stopped
+
+  # LiteLLM Proxy: 多模型 LLM 网关
+  # - Admin UI: http://localhost:${LITELLM_PORT:-4000}/ui
+  # - 业务调用: http://litellm:4000 (容器网络内)
+  # - 数据库: 复用 wikforge-postgres,自动建库 ${LITELLM_DB:-litellm}
+  # - 缓存: 复用 wikforge-redis DB 1
+  litellm:
+    image: ghcr.io/berriai/litellm-database:main-stable
+    container_name: wikforge-litellm
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "2"]
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-change-me}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-sk-salt-change-me}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wikforge}:${POSTGRES_PASSWORD:-wikforge_secret}@postgres:5432/${LITELLM_DB:-litellm}
+      STORE_MODEL_IN_DB: "True"
+      UI_USERNAME: ${LITELLM_UI_USERNAME:-admin}
+      UI_PASSWORD: ${LITELLM_UI_PASSWORD:-admin}
+      # 上游模型凭证 - 由 wikforge .env 注入,不写入镜像
+      CPA_API_BASE: ${CPA_API_BASE:-https://api.openai.com/v1}
+      CPA_API_KEY: ${CPA_API_KEY:-}
+      DASHSCOPE_API_BASE: ${DASHSCOPE_API_BASE:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+    ports:
+      - "${LITELLM_PORT:-4000}:4000"
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=5); sys.exit(0)\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  # --- Application Services ---
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: wikforge-api
+    # 启动时自动: postgres 就绪等待 -> alembic upgrade head -> init_db -> uvicorn
+    # 入口脚本是幂等的,容器重启不会污染数据。
+    command: /app/scripts/api-entrypoint.sh
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-wikforge}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-wikforge_secret}
+      - POSTGRES_DB=${POSTGRES_DB:-wikforge}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - OPENSEARCH_HOST=opensearch
+      - OPENSEARCH_PORT=9200
+      - OPENSEARCH_USER=${OPENSEARCH_USER:-admin}
+      - OPENSEARCH_PASSWORD=${OPENSEARCH_PASSWORD:-Admin@123}
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - MINIO_HOST=minio
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production}
+      - LITELLM_API_BASE=${LITELLM_API_BASE:-http://litellm:4000}
+      - LITELLM_API_KEY=${LITELLM_API_KEY:-${LITELLM_MASTER_KEY:-sk-change-me}}
+      - LITELLM_MODEL=${LITELLM_MODEL:-gpt-5.5}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-v3}
+      - INITIAL_ADMIN_EMAIL=${INITIAL_ADMIN_EMAIL:-admin@wikforge.com}
+      - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:-Admin@123}
+      - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost","http://localhost:3000"]}
+      - DEBUG=${DEBUG:-false}
+      # 模型缓存目录: cross-encoder reranker (BAAI/bge-reranker-base) 在 api 进程加载,
+      # 与 worker 共享同一个 models_cache volume, 避免重复下载 ~400MB 权重
+      - HF_HOME=/models/huggingface
+      - HF_HUB_CACHE=/models/huggingface
+      - TRANSFORMERS_CACHE=/models/huggingface
+      - SENTENCE_TRANSFORMERS_HOME=/models/sentence_transformers
+      # 关掉 huggingface 新版 xet (CAS) 协议, 在国内网络下经常卡死;
+      # 走传统 HTTP 下载更稳。
+      - HF_HUB_DISABLE_XET=1
+      # Reranker provider: dashscope (默认) | local | disabled
+      # dashscope: 调阿里 gte-rerank-v2 (中文最佳, 不占本地内存)
+      # local:     用本地 BAAI/bge-reranker-base (~440MB)
+      # disabled:  跳过 cross-encoder, 用 bigram fallback
+      - RERANK_PROVIDER=${RERANK_PROVIDER:-dashscope}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app
+      - models_cache:/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 60s
+      retries: 3
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: wikforge-worker
+    # 单进程串行处理 PDF (parser 模型 ~2-3GB,Docker 默认 7.65GB 内存,
+    # 2 个并行 fork 子进程会同时加载模型 OOM SIGKILL)
+    command: celery -A app.core.celery_app:celery_app worker --loglevel=info --concurrency=1
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-wikforge}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-wikforge_secret}
+      - POSTGRES_DB=${POSTGRES_DB:-wikforge}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - OPENSEARCH_HOST=opensearch
+      - OPENSEARCH_PORT=9200
+      - OPENSEARCH_USER=${OPENSEARCH_USER:-admin}
+      - OPENSEARCH_PASSWORD=${OPENSEARCH_PASSWORD:-Admin@123}
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - MINIO_HOST=minio
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - LITELLM_API_BASE=${LITELLM_API_BASE:-http://litellm:4000}
+      - LITELLM_API_KEY=${LITELLM_API_KEY:-${LITELLM_MASTER_KEY:-sk-change-me}}
+      - LITELLM_MODEL=${LITELLM_MODEL:-gpt-5.5}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-v3}
+      - INITIAL_ADMIN_EMAIL=${INITIAL_ADMIN_EMAIL:-admin@wikforge.com}
+      - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:-Admin@123}
+      # 模型缓存目录: 让 huggingface / surya / marker 把模型下载到持久化 volume
+      - HF_HOME=/models/huggingface
+      - HF_HUB_CACHE=/models/huggingface
+      - TRANSFORMERS_CACHE=/models/huggingface
+      - SENTENCE_TRANSFORMERS_HOME=/models/sentence_transformers
+      # 关掉 huggingface xet (CAS) 协议, 国内网络下经常卡死, 走传统 HTTP
+      - HF_HUB_DISABLE_XET=1
+      # surya / marker 的模型缓存路径走 MODEL_CACHE_DIR (BaseSettings 字段名)
+      - MODEL_CACHE_DIR=/models/datalab/models
+      # PDF 解析模式: fitz (设计原意) | marker (复杂版面+OCR,需 ~16GB) | auto
+      # 设计文档里 marker 只做 layout-aware 解析,扫描件 / 复杂版面交给 L3 多模态 LLM
+      # (UniversalParser, 默认 qwen-vl-plus)。所以默认 fitz, 让 L3 分担复杂场景。
+      - PDF_PARSER_MODE=${PDF_PARSER_MODE:-fitz}
+    volumes:
+      - ./backend:/app
+      - models_cache:/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.core.celery_app:celery_app inspect ping --timeout 10 || exit 1"]
+      interval: 30s
+      timeout: 60s
+      retries: 3
+    restart: unless-stopped
+
+  # Celery beat: 定时任务调度器, 触发 watchdog (每 5 分钟扫一次卡住文档)
+  # 共享 backend 镜像, 使用最少的资源 (单进程, 无 worker 池)
+  beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: wikforge-beat
+    command: celery -A app.core.celery_app:celery_app beat --loglevel=info
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-wikforge}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-wikforge_secret}
+      - POSTGRES_DB=${POSTGRES_DB:-wikforge}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./backend:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      worker:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Flower: Celery 任务监控 Web UI
+  # 浏览器访问 http://localhost:${FLOWER_PORT:-5555}, 看实时队列 / 任务历史 / worker 状态
+  flower:
+    image: mher/flower:2.0
+    container_name: wikforge-flower
+    command:
+      - celery
+      - --broker=redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}redis:6379/0
+      - flower
+      - --port=5555
+      - --persistent=True
+      - --db=/data/flower.db
+      - --basic-auth=${FLOWER_USERNAME:-admin}:${FLOWER_PASSWORD:-admin}
+    ports:
+      - "${FLOWER_PORT:-5555}:5555"
+    volumes:
+      - flower_data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    # 任务 18 完成前，frontend/Dockerfile 已存在但容器内为生产构建。
+    # 开发模式下若需热更新，可临时改为 image: node:20-alpine + working_dir + 挂载 ./frontend。
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: wikforge-frontend
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "${FRONTEND_PORT:-80}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000 || exit 1"]
+      interval: 30s
+      timeout: 60s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  opensearch_data:
+  qdrant_data:
+  minio_data:
+  redis_data:
+  flower_data:
+  # 共享 huggingface / surya / marker 模型缓存,
+  # 避免 worker 每次重启都重新下载 ~2GB 模型
+  models_cache:

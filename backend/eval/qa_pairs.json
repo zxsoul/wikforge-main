@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "description": "Wikforge 检索质量评估数据集（任务 25.6）。每条样本包含一个查询、人工标注的相关 chunk_id 列表（按相关性递减排序）以及可选的标准答案（用于答案质量人工评审）。",
+  "samples": [
+    {
+      "id": "qa-001",
+      "query": "什么是 RAG？它的核心组成部分有哪些？",
+      "relevant_chunk_ids": [
+        "doc-rag-overview-c0",
+        "doc-rag-overview-c1",
+        "doc-rag-architecture-c2"
+      ],
+      "expected_answer_keywords": ["检索", "生成", "向量"],
+      "category": "factual",
+      "difficulty": "easy"
+    },
+    {
+      "id": "qa-002",
+      "query": "BM25 与 Dense Embedding 在召回上的差异是什么？",
+      "relevant_chunk_ids": [
+        "doc-bm25-c1",
+        "doc-vector-c0",
+        "doc-hybrid-c2"
+      ],
+      "expected_answer_keywords": ["稀疏", "稠密", "关键词", "语义"],
+      "category": "comparison",
+      "difficulty": "medium"
+    },
+    {
+      "id": "qa-003",
+      "query": "RRF 融合算法的 k 参数应该如何选择？",
+      "relevant_chunk_ids": [
+        "doc-rrf-c0",
+        "doc-rrf-c1"
+      ],
+      "expected_answer_keywords": ["k=60", "归一", "倒数"],
+      "category": "how-to",
+      "difficulty": "medium"
+    },
+    {
+      "id": "qa-004",
+      "query": "Cross-Encoder 精排相比 Bi-Encoder 召回有什么优势？",
+      "relevant_chunk_ids": [
+        "doc-rerank-c0",
+        "doc-rerank-c1",
+        "doc-rerank-c3"
+      ],
+      "expected_answer_keywords": ["交互", "精度", "成本"],
+      "category": "comparison",
+      "difficulty": "medium"
+    },
+    {
+      "id": "qa-005",
+      "query": "权限过滤为什么需要在向量检索前置（Pre-Filtering）？",
+      "relevant_chunk_ids": [
+        "doc-permission-c0",
+        "doc-permission-c2"
+      ],
+      "expected_answer_keywords": ["性能", "数据泄漏", "ABAC"],
+      "category": "design",
+      "difficulty": "hard"
+    },
+    {
+      "id": "qa-006",
+      "query": "如何处理 PDF 中的跨页表格？",
+      "relevant_chunk_ids": [
+        "doc-table-c0",
+        "doc-table-c1",
+        "doc-pdf-c2"
+      ],
+      "expected_answer_keywords": ["合并", "表头", "列结构"],
+      "category": "how-to",
+      "difficulty": "medium"
+    },
+    {
+      "id": "qa-007",
+      "query": "文档处理管线的状态机包含哪些阶段？",
+      "relevant_chunk_ids": [
+        "doc-pipeline-c0"
+      ],
+      "expected_answer_keywords": ["pending", "parsing", "completed"],
+      "category": "factual",
+      "difficulty": "easy"
+    },
+    {
+      "id": "qa-008",
+      "query": "查询改写、HyDE 和子查询分解分别在什么场景下使用？",
+      "relevant_chunk_ids": [
+        "doc-query-enhance-c0",
+        "doc-query-enhance-c1",
+        "doc-query-enhance-c2"
+      ],
+      "expected_answer_keywords": ["改写", "假设文档", "分解"],
+      "category": "comparison",
+      "difficulty": "hard"
+    },
+    {
+      "id": "qa-009",
+      "query": "解析质量评分由哪些维度组成？",
+      "relevant_chunk_ids": [
+        "doc-quality-c0",
+        "doc-quality-c1"
+      ],
+      "expected_answer_keywords": ["文本保留率", "标题层级", "表格完整"],
+      "category": "factual",
+      "difficulty": "easy"
+    },
+    {
+      "id": "qa-010",
+      "query": "Profile 系统如何匹配文档？优先级如何决定？",
+      "relevant_chunk_ids": [
+        "doc-profile-c0",
+        "doc-profile-c1",
+        "doc-profile-c2"
+      ],
+      "expected_answer_keywords": ["特征", "priority", "updated_at"],
+      "category": "how-to",
+      "difficulty": "medium"
+    }
+  ]
+}

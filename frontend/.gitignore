@@ -1,0 +1,23 @@
+# Next.js
+.next
+out
+
+# dependencies
+node_modules
+
+# misc
+.DS_Store
+.env*.local
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Playwright (任务 25.9)
+e2e-results/
+playwright-report/
+test-results/
+
+# Build artifacts
+tsconfig.tsbuildinfo
