@@ -1,3 +1,5 @@
+# 前言
+本项目为学习项目，开源项目来自github,上传初心是认为该项目的内容非常适合刚学习完langchian的rag的人，这个项目中基本是通过手搓实现的rag，并没有langchain中的简易封装，所以作者本人非常喜欢这个项目，不仅学到rag，还能明白各种维护操作，更加符合工程思维
 <div align="center">
 
 <img src="docs/assets/banner.svg" alt="Wikforge" width="100%"/>
