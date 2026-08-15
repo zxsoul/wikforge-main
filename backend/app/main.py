@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer
 
 from app.api.admin_dictionaries import router as admin_dictionaries_router
 from app.api.admin_monitoring import router as admin_monitoring_router
@@ -54,7 +55,8 @@ def create_app() -> FastAPI:
         openapi_url=f"{settings.API_PREFIX}/openapi.json",
         debug=settings.DEBUG,
     )
-
+    scheme = HTTPBearer()
+    app.openapi_schema = None
     # ---- CORS ----
     app.add_middleware(
         CORSMiddleware,
@@ -125,6 +127,27 @@ def create_app() -> FastAPI:
         api_prefix=settings.API_PREFIX,
         cors_origins=settings.CORS_ORIGINS,
     )
+    from fastapi.openapi.utils import get_openapi
+    def custom_openapi():
+        if app.openapi_schema:
+            return app.openapi_schema
+        openapi_schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            description=app.description,
+            routes=app.routes,
+        )
+        openapi_schema["components"]["securitySchemes"] = {
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+            }
+        }
+        app.openapi_schema = openapi_schema
+        return app.openapi_schema
+
+    app.openapi = custom_openapi
     return app
 
 

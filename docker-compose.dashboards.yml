@@ -1,0 +1,20 @@
+# 可选组件：OpenSearch Dashboards 可视化界面
+# 用法：docker compose -f docker-compose.yml -f docker-compose.dashboards.yml up -d opensearch-dashboards
+# 访问：http://localhost:5601 （Dev Tools 里可直接查询 chunks 索引）
+services:
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.17.1
+    container_name: wikforge-opensearch-dashboards
+    ports:
+      - "5601:5601"
+    environment:
+      # 主容器关闭了 security 插件，Dashboards 也要对应关闭
+      - 'OPENSEARCH_HOSTS=["http://opensearch:9200"]'
+      - DISABLE_SECURITY_PLUGIN=true
+    volumes:
+      # 直接挂载修正后的配置（镜像 entrypoint 未生效时的可靠做法）
+      - ./opensearch/dashboards.yml:/usr/share/opensearch-dashboards/config/opensearch_dashboards.yml
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    restart: unless-stopped

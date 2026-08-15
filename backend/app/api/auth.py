@@ -107,18 +107,32 @@ async def get_auth_service(
     return AuthService(db=db, redis=redis)
 
 
+# async def get_current_user(
+#     request: Request,
+#     auth_service: AuthService = Depends(get_auth_service),
+# ) -> User:
+#     """JWT 验证中间件：从 Authorization 头提取并校验 access token。
+#
+#     错误信息友好（401，由 :class:`UnauthorizedException` 统一返回）。
+#     """
+#     auth_header = request.headers.get("Authorization") or ""
+#     scheme, _, token = auth_header.partition(" ")
+#     if scheme.lower() != "bearer" or not token:
+#         raise UnauthorizedException("缺少认证令牌")
+#     return await auth_service.verify_access_token(token)
+
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+security = HTTPBearer()
+
 async def get_current_user(
     request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     auth_service: AuthService = Depends(get_auth_service),
 ) -> User:
     """JWT 验证中间件：从 Authorization 头提取并校验 access token。
-
-    错误信息友好（401，由 :class:`UnauthorizedException` 统一返回）。
     """
-    auth_header = request.headers.get("Authorization") or ""
-    scheme, _, token = auth_header.partition(" ")
-    if scheme.lower() != "bearer" or not token:
-        raise UnauthorizedException("缺少认证令牌")
+    token = credentials.credentials
     return await auth_service.verify_access_token(token)
 
 

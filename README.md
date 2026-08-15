@@ -1,43 +1,5 @@
 # 前言
 本项目为学习项目，开源项目来自github,上传初心是认为该项目的内容非常适合刚学习完langchian的rag的人，这个项目中基本是通过手搓实现的rag，并没有langchain中的简易封装，所以作者本人非常喜欢这个项目，不仅学到rag，还能明白各种维护操作，更加符合工程思维
-<div align="center">
-
-<img src="docs/assets/banner.svg" alt="Wikforge" width="100%"/>
-
-<br/>
-
-<p>
-  <a href="#-quick-start"><img src="https://img.shields.io/badge/部署-make_first--run-7C3AED?style=for-the-badge&logo=docker&logoColor=white" alt="Quick Start"/></a>
-  <a href="docs/deploy.md"><img src="https://img.shields.io/badge/文档-deploy.md-4F46E5?style=for-the-badge&logo=readthedocs&logoColor=white" alt="Docs"/></a>
-  <a href="#-roadmap"><img src="https://img.shields.io/badge/Roadmap-55_项-22C55E?style=for-the-badge&logo=todoist&logoColor=white" alt="Roadmap"/></a>
-  <a href="https://github.com/fanxuankai/wikforge/actions/workflows/ci.yml"><img src="https://github.com/fanxuankai/wikforge/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"/></a>
-</p>
-
-<p>
-  <img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python 3.11"/>
-  <img src="https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white" alt="FastAPI"/>
-  <img src="https://img.shields.io/badge/Celery-5.4-37814A?logo=celery&logoColor=white" alt="Celery"/>
-  <img src="https://img.shields.io/badge/Next.js-14-000000?logo=nextdotjs&logoColor=white" alt="Next.js 14"/>
-  <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white" alt="TypeScript"/>
-  <img src="https://img.shields.io/badge/Tailwind-3.4-06B6D4?logo=tailwindcss&logoColor=white" alt="Tailwind"/>
-</p>
-
-<p>
-  <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL"/>
-  <img src="https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white" alt="Redis"/>
-  <img src="https://img.shields.io/badge/OpenSearch-2.17-005EB8?logo=opensearch&logoColor=white" alt="OpenSearch"/>
-  <img src="https://img.shields.io/badge/Qdrant-1.14-DC382D?logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI0RDMzgyRCIgZD0iTTEyIDJsOSA1djEwbC05IDUtOS01VjdsOS01eiIvPjwvc3ZnPg==&logoColor=white" alt="Qdrant"/>
-  <img src="https://img.shields.io/badge/MinIO-S3-C72E49?logo=minio&logoColor=white" alt="MinIO"/>
-  <img src="https://img.shields.io/badge/LiteLLM-Proxy-8B5CF6" alt="LiteLLM"/>
-</p>
-
-<p>
-  <strong>企业级 RAG 知识库 · 文档解析 · 智能检索 · 流式问答 · 反馈闭环</strong>
-</p>
-
-</div>
-
-<br/>
 
 ## ✨ 核心能力
 
@@ -54,36 +16,6 @@
 📊 后台管理           空间 / 用户 / 权限 / Profile / 词典 / 反馈 / 监控 / LLM 网关
 ```
 
-## 📸 产品截图
-
-<table>
-  <tr>
-    <td width="50%">
-      <img src="docs/screenshots/01-landing.png" alt="落地页"/>
-      <p align="center"><sub><b>落地页</b> · 紫色品牌色 + 三入口</sub></p>
-    </td>
-    <td width="50%">
-      <img src="docs/screenshots/02-login.png" alt="登录"/>
-      <p align="center"><sub><b>登录</b> · 邮箱密码 / OIDC 单点</sub></p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="docs/screenshots/03-documents.png" alt="文档管理"/>
-      <p align="center"><sub><b>文档管理</b> · 多文件上传 + 实时进度 + 标签/移动/批量</sub></p>
-    </td>
-    <td width="50%">
-      <img src="docs/screenshots/04-chat.png" alt="RAG 流式问答"/>
-      <p align="center"><sub><b>RAG 流式问答</b> · Markdown 渲染 + 引用标注 + 会话记忆</sub></p>
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2">
-      <img src="docs/screenshots/05-monitoring.png" alt="系统监控"/>
-      <p align="center"><sub><b>系统监控</b> · 文档队列状态 + CPU / 内存 / 磁盘实时</sub></p>
-    </td>
-  </tr>
-</table>
 
 ## 🚀 Quick Start
 
@@ -373,29 +305,3 @@ wikforge/
 | [`frontend/e2e/README.md`](frontend/e2e/README.md) | Playwright E2E 说明 |
 | [`scripts/README.md`](scripts/README.md) | 运维脚本说明 |
 
-## 🔐 安全
-
-内网部署。
-
-- ✅ `.env` 在 `.gitignore` 第 1 行, 凭证不入库
-- ✅ `secrets/` 目录在 `.gitignore`, 本地凭证速查表 (`secrets/CREDENTIALS.md`) 永不入库
-- ✅ LiteLLM 上游 `api_base` / `api_key` 都走 env, 不硬编码网关域名
-- ✅ JWT 签发 / 轮换 / 失败次数锁定
-- ✅ Permission Pre-Filtering 在向量库 + 全文库 + Cache 三层一致
-- ✅ Profile / 解析失败队列 + 重试上限 + 审核闭环
-- ✅ Celery Watchdog 5 分钟扫一次僵尸文档,自动标 failed
-- ✅ Redis AOF 持久化 (everysec sync), 重启不丢任务队列 / 会话状态
-- ⚠️ 首次启动会用 `INITIAL_ADMIN_PASSWORD` 播种 admin 账号, 务必先设强密码
-- ⚠️ `make secrets` 一键生成所有强随机密钥 (Master Key / Salt / Postgres / MinIO 等)
-- ❌ 当前无 HTTPS 终止, 部署到公网前请加反向代理 (Roadmap D3)
-
-
----
-
-<div align="center">
-
-由 ❤️ 与 ☕ 在 macOS 上锻造
-
-<sub>Wiki + Forge — 锻造企业知识库</sub>
-
-</div>
