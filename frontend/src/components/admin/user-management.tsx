@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import Link from "next/link";
+import { Search, ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
@@ -112,18 +113,19 @@ export function UserManagement() {
               <th className="px-4 py-3 text-left font-medium">角色</th>
               <th className="px-4 py-3 text-left font-medium">注册时间</th>
               <th className="px-4 py-3 text-left font-medium">最近登录</th>
+              <th className="px-4 py-3 text-left font-medium">操作</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                   加载中...
                 </td>
               </tr>
             ) : users.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                   {debouncedSearch ? "未找到匹配的用户" : "暂无用户"}
                 </td>
               </tr>
@@ -154,6 +156,14 @@ export function UserManagement() {
                     {user.last_login_at
                       ? new Date(user.last_login_at).toLocaleDateString("zh-CN")
                       : "从未登录"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link href={`/admin/users/${user.id}`}>
+                      <Button variant="outline" size="sm">
+                        <ShieldCheck className="mr-1 h-3.5 w-3.5" />
+                        空间权限
+                      </Button>
+                    </Link>
                   </td>
                 </tr>
               ))

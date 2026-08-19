@@ -20,6 +20,9 @@ from app.api.admin_monitoring import router as admin_monitoring_router
 from app.api.admin_profiles import router as admin_profiles_router
 from app.api.admin_reviews import router as admin_reviews_router
 from app.api.admin_universal_parser import router as admin_universal_parser_router
+from app.api.admin_user_permissions import (
+    router as admin_user_permissions_router,
+)
 from app.api.admin_users import router as admin_users_router
 from app.api.auth import router as auth_router
 from app.api.documents import router as documents_router
@@ -82,6 +85,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_dictionaries_router)
     app.include_router(admin_universal_parser_router)
     app.include_router(admin_users_router)
+    app.include_router(admin_user_permissions_router)
     app.include_router(admin_monitoring_router)
     app.include_router(feedback_router)
     app.include_router(ik_dict_router)
