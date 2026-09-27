@@ -562,6 +562,7 @@ async def delete_document(
     if allowed is not None:
         # 读 document 的 space_id 校验权限
         from fastapi import HTTPException
+
         from app.models.document import Document
         doc_row = (
             await db.execute(select(Document.space_id).where(Document.id == document_id))
@@ -589,6 +590,7 @@ async def batch_delete_documents(
     两者必须二选一传。
     """
     from fastapi import HTTPException
+
     from app.models.document import Document
 
     if not body.ids and not body.status:
@@ -661,6 +663,7 @@ async def get_document_download_url(
     返回的 URL 直接指向 MinIO, 前端可直接 <a href> 或 <iframe>。
     """
     from fastapi import HTTPException
+
     from app.core.minio import generate_presigned_get_url
     from app.models.document import Document
 

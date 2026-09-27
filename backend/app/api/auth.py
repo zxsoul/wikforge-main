@@ -121,7 +121,7 @@ async def get_auth_service(
 #         raise UnauthorizedException("缺少认证令牌")
 #     return await auth_service.verify_access_token(token)
 
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 security = HTTPBearer()
 
@@ -241,8 +241,8 @@ async def change_password(
     需要正确的旧密码; 新密码强度由 Pydantic Schema 校验 (8-64 字符)。
     成功后不刷新 JWT, 客户端如需可以重新登录获得新 token。
     """
+    from app.core.exceptions import ValidationException
     from app.core.security import hash_password, verify_password
-    from app.core.exceptions import UnauthorizedException, ValidationException
 
     # OIDC 账号 (本地无密码) 不能用此端点改密码
     if not current_user.password_hash:

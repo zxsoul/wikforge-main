@@ -19,9 +19,10 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import create_engine, text
+
 from app.core.celery_app import celery_app
 from app.core.config import get_settings
-from sqlalchemy import create_engine, text
 
 logger = logging.getLogger(__name__)
 
