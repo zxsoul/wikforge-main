@@ -38,7 +38,6 @@ INITIAL_ADMIN_PASSWORD=$(grep ^INITIAL_ADMIN_PASSWORD .env | cut -d= -f2) \
 # 4. 访问 (账号密码见下方"服务入口与凭证")
 open http://localhost                # 前端
 open http://localhost:8000/docs      # API 文档 (Swagger)
-open http://localhost:4000/ui        # LiteLLM Admin
 open http://localhost:5555           # Flower (Celery 监控)
 open http://localhost:9001           # MinIO Console
 open http://localhost:6333/dashboard # Qdrant Dashboard
@@ -55,8 +54,6 @@ open http://localhost:6333/dashboard # Qdrant Dashboard
 |---|---|---|---|
 | **Wikforge 主系统** | http://localhost | `INITIAL_ADMIN_EMAIL` | `INITIAL_ADMIN_PASSWORD` |
 | **API 文档** (Swagger) | http://localhost:8000/docs | — (登录后复用主系统 JWT) | — |
-| **LiteLLM Admin UI** | http://localhost:4000/ui | `LITELLM_UI_USERNAME` | `LITELLM_UI_PASSWORD` |
-| **LiteLLM Master Key** (调 API) | http://localhost:4000 | — | `LITELLM_MASTER_KEY` |
 | **Flower** (Celery 监控) | http://localhost:5555 | `FLOWER_USERNAME` | `FLOWER_PASSWORD` |
 | **MinIO Console** | http://localhost:9001 | `MINIO_ACCESS_KEY` | `MINIO_SECRET_KEY` |
 | **Qdrant Dashboard** | http://localhost:6333/dashboard | — (内网信任,无鉴权) | — |
@@ -94,7 +91,6 @@ flowchart LR
         Worker[Celery Worker<br/>concurrency=1<br/>PDF/Embed/Index]
         Beat[Celery Beat<br/>定时任务]
         Flower[Flower<br/>队列监控]
-        LiteLLM[LiteLLM Proxy<br/>多模型网关 + UI]
     end
 
     subgraph Storage["💾 存储层"]
@@ -113,12 +109,13 @@ flowchart LR
     User --> Browser
     Browser <--> FE
     FE <--> API
-    API <--> PG & Redis & OS & QD & MinIO & LiteLLM
+    API <--> PG & Redis & OS & QD & MinIO
     API -.触发任务.-> Worker
     Beat -.定时调度.-> Worker
     Flower -.读取.-> Redis
-    Worker <--> PG & Redis & OS & QD & MinIO & LiteLLM
-    LiteLLM --> CPA & DS
+    Worker <--> PG & Redis & OS & QD & MinIO
+    API --> CPA & DS
+    Worker --> CPA & DS
 
     classDef fe fill:#3B82F6,stroke:#1E40AF,color:#fff
     classDef api fill:#10B981,stroke:#047857,color:#fff
@@ -130,7 +127,6 @@ flowchart LR
     class FE fe
     class API api
     class Worker,Beat,Flower worker
-    class LiteLLM llm
     class PG,Redis,OS,QD,MinIO store
     class CPA,DS upstream
 ```
@@ -206,7 +202,7 @@ flowchart TB
 | **全文** | OpenSearch | 2.17 | BM25 + 中文分词 (IK 可选) |
 | **向量** | Qdrant | 1.14 | Dense (1024d) + Sparse (TF-IDF) |
 | **存储** | MinIO | 2025 | S3 兼容对象存储 |
-| **LLM** | LiteLLM Proxy | latest | 100+ provider 统一网关 |
+| **LLM** | openai SDK 直连 | 1.x | 直连任意 OpenAI 兼容端点 (2026-09 移除 LiteLLM Proxy，省 ~2GB 内存) |
 
 ## 🧰 常用命令
 
@@ -251,12 +247,10 @@ wikforge/
 │   ├── src/components/   # UI 组件
 │   ├── src/lib/          # api-client / utils
 │   └── src/stores/       # Zustand stores
-├── litellm/
-│   └── config.yaml       # LiteLLM Proxy 模型路由 (api_base/key 走 .env)
-├── scripts/              # verify_compose / smoke-test / backup / postgres-init
+├── scripts/              # verify_compose / smoke-test / backup
 ├── secrets/              # 本地凭证速查 (gitignored,不入库)
 ├── docs/                 # 部署文档 / 架构图 / 资源
-└── docker-compose.yml    # 11 服务编排 (api / worker / beat / flower / litellm + 6 存储)
+└── docker-compose.yml    # 10 服务编排 (api / worker / beat / flower + 6 存储)
 ```
 
 ## 🛣️ Roadmap

@@ -8,12 +8,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-wikforge}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wikforge_secret}
       POSTGRES_DB: ${POSTGRES_DB:-wikforge}
-      LITELLM_DB: ${LITELLM_DB:-litellm}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wikforge}"]
       interval: 30s
@@ -26,7 +24,6 @@ services:
     container_name: wikforge-redis
     # AOF 持久化: every-second 同步, 重启不丢任务队列 / 会话状态
     # 内网部署默认无密码 (容器网络已隔离); 公网部署务必通过 .env 设置 REDIS_PASSWORD
-    # 并同步更新 litellm/config.yaml 的 cache_params (LiteLLM 走单独连接)
     command: >
       redis-server
       --appendonly yes
@@ -108,43 +105,8 @@ services:
       retries: 3
     restart: unless-stopped
 
-  # LiteLLM Proxy: 多模型 LLM 网关
-  # - Admin UI: http://localhost:${LITELLM_PORT:-4000}/ui
-  # - 业务调用: http://litellm:4000 (容器网络内)
-  # - 数据库: 复用 wikforge-postgres,自动建库 ${LITELLM_DB:-litellm}
-  # - 缓存: 复用 wikforge-redis DB 1
-  litellm:
-    image: ghcr.io/berriai/litellm-database:main-stable
-    container_name: wikforge-litellm
-    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "2"]
-    environment:
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-change-me}
-      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-sk-salt-change-me}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-wikforge}:${POSTGRES_PASSWORD:-wikforge_secret}@postgres:5432/${LITELLM_DB:-litellm}
-      STORE_MODEL_IN_DB: "True"
-      UI_USERNAME: ${LITELLM_UI_USERNAME:-admin}
-      UI_PASSWORD: ${LITELLM_UI_PASSWORD:-admin}
-      # 上游模型凭证 - 由 wikforge .env 注入,不写入镜像
-      CPA_API_BASE: ${CPA_API_BASE:-https://api.openai.com/v1}
-      CPA_API_KEY: ${CPA_API_KEY:-}
-      DASHSCOPE_API_BASE: ${DASHSCOPE_API_BASE:-https://dashscope.aliyuncs.com/compatible-mode/v1}
-      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
-    ports:
-      - "${LITELLM_PORT:-4000}:4000"
-    volumes:
-      - ./litellm/config.yaml:/app/config.yaml:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=5); sys.exit(0)\" || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    restart: unless-stopped
+  # (已移除 LiteLLM Proxy 服务: 后端改为通过 openai SDK 直连上游模型,
+  #  见 backend/app/services/llm_gateway.py 模块 docstring)
 
   # --- Application Services ---
 
@@ -179,10 +141,14 @@ services:
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production}
-      - LITELLM_API_BASE=${LITELLM_API_BASE:-http://litellm:4000}
-      - LITELLM_API_KEY=${LITELLM_API_KEY:-${LITELLM_MASTER_KEY:-sk-change-me}}
-      - LITELLM_MODEL=${LITELLM_MODEL:-gpt-5.5}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-v3}
+      # Chat 模型直连（默认取 CPA 网关配置）
+      - CHAT_API_BASE=${CHAT_API_BASE:-${CPA_API_BASE:-https://api.openai.com/v1}}
+      - CHAT_API_KEY=${CHAT_API_KEY:-${CPA_API_KEY:-}}
+      - CHAT_MODEL=${CHAT_MODEL:-gpt-5.5}
+      # Embedding 直连（默认取阿里百炼配置）
+      - EMBEDDING_API_BASE=${EMBEDDING_API_BASE:-${DASHSCOPE_API_BASE:-https://dashscope.aliyuncs.com/compatible-mode/v1}}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-${DASHSCOPE_API_KEY:-}}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-v4}
       - INITIAL_ADMIN_EMAIL=${INITIAL_ADMIN_EMAIL:-admin@wikforge.com}
       - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:-Admin@123}
       - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost","http://localhost:3000"]}
@@ -217,8 +183,6 @@ services:
       qdrant:
         condition: service_healthy
       minio:
-        condition: service_healthy
-      litellm:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
@@ -257,10 +221,14 @@ services:
       - MINIO_PORT=9000
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
-      - LITELLM_API_BASE=${LITELLM_API_BASE:-http://litellm:4000}
-      - LITELLM_API_KEY=${LITELLM_API_KEY:-${LITELLM_MASTER_KEY:-sk-change-me}}
-      - LITELLM_MODEL=${LITELLM_MODEL:-gpt-5.5}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-v3}
+      # Chat 模型直连（默认取 CPA 网关配置）
+      - CHAT_API_BASE=${CHAT_API_BASE:-${CPA_API_BASE:-https://api.openai.com/v1}}
+      - CHAT_API_KEY=${CHAT_API_KEY:-${CPA_API_KEY:-}}
+      - CHAT_MODEL=${CHAT_MODEL:-gpt-5.5}
+      # Embedding 直连（默认取阿里百炼配置）
+      - EMBEDDING_API_BASE=${EMBEDDING_API_BASE:-${DASHSCOPE_API_BASE:-https://dashscope.aliyuncs.com/compatible-mode/v1}}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-${DASHSCOPE_API_KEY:-}}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-v4}
       - INITIAL_ADMIN_EMAIL=${INITIAL_ADMIN_EMAIL:-admin@wikforge.com}
       - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:-Admin@123}
       # 模型缓存目录: 让 huggingface / surya / marker 把模型下载到持久化 volume
@@ -289,8 +257,6 @@ services:
       qdrant:
         condition: service_healthy
       minio:
-        condition: service_healthy
-      litellm:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "celery -A app.core.celery_app:celery_app inspect ping --timeout 10 || exit 1"]

@@ -59,7 +59,6 @@ make first-run
 |---|---|---|
 | Wikforge 前端 | http://localhost:${FRONTEND_PORT} | `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD` |
 | API 文档 (Swagger) | http://localhost:${API_PORT}/docs | - |
-| LiteLLM Admin UI | http://localhost:${LITELLM_PORT}/ui | `LITELLM_UI_USERNAME` / `LITELLM_UI_PASSWORD` 或直接用 `LITELLM_MASTER_KEY` |
 | MinIO 控制台 | http://localhost:${MINIO_CONSOLE_PORT} | `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` |
 | Qdrant Dashboard | http://localhost:${QDRANT_PORT}/dashboard | - |
 
@@ -118,7 +117,8 @@ pydantic `EmailStr` 不接受 `.local` / `.test` / `.example` 等保留域。改
 看 worker 日志 `make logs-worker`:
 
 - **embedding 调用失败**: `DASHSCOPE_API_KEY` 没配 / 错误。`make secrets` 输出不会覆盖此值,你手填的不要被覆盖。
-- **LiteLLM 调用失败**: 进 LiteLLM UI Test 页验证 `gpt-5.5` / `text-embedding-v3` 直接能调通。
+- **LLM 调用失败**: 后端已直连上游（2026-09 起移除 LiteLLM Proxy），用 curl 直接验证
+  `CHAT_API_BASE` / `EMBEDDING_API_BASE` 指向的端点 + 对应 Key 能调通中报错的模型名。
 - **OCR / LibreOffice 超时**: 调大 `UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT` 或 worker `--time-limit`。
 
 ### 6.6 Postgres 健康检查反复失败
@@ -180,7 +180,6 @@ docker compose exec -T postgres psql -U wikforge -d wikforge < backups/wikforge-
 |---|---|---|
 | 80 | Frontend (nginx) | 公网 |
 | 8000 | API (FastAPI) | 公网 (建议反代) |
-| 4000 | LiteLLM Proxy | 内网 |
 | 9001 | MinIO Console | 内网 |
 | 9000 | MinIO API (S3) | 内网 |
 | 9200 | OpenSearch | 内网 |
