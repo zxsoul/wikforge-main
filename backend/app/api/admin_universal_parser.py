@@ -23,18 +23,18 @@ class UniversalParserConfigResponse(BaseModel):
     """Universal Parser 当前生效的模型配置 + 已知模型目录。
 
     - ``vision_model`` / ``text_model`` 直接来自 ``settings``，空字符串表示
-      “未覆盖、使用 ``LITELLM_MODEL`` 默认值”，UI 应据此展示 “(默认)” 占位。
+      “未覆盖、使用 ``CHAT_MODEL`` 默认值”，UI 应据此展示 “(默认)” 占位。
     - ``known_vision_models`` / ``known_text_models`` 是信息性目录，UI 用来
-      构建下拉列表；运行期实际派发的模型不限于此列表（LiteLLM 兼容即可）。
+      构建下拉列表；运行期实际派发的模型不限于此列表（OpenAI 兼容即可）。
     """
 
     vision_model: str = Field(
         ...,
-        description="多模态调用使用的模型；空字符串表示沿用 LITELLM_MODEL 默认值。",
+        description="多模态调用使用的模型；空字符串表示沿用 CHAT_MODEL 默认值。",
     )
     text_model: str = Field(
         ...,
-        description="纯文本兜底调用使用的模型；空字符串表示沿用 LITELLM_MODEL 默认值。",
+        description="纯文本兜底调用使用的模型；空字符串表示沿用 CHAT_MODEL 默认值。",
     )
     known_vision_models: list[str] = Field(
         ...,

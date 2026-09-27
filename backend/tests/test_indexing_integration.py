@@ -20,7 +20,7 @@
 后端策略：
 - ``qdrant_client`` 复用 ``test_indexing_qdrant_write.py`` 安装的轻量 stub
   （``PointStruct`` / ``SparseVector`` / ``Filter`` 等都是 dataclass）。
-- ``litellm.aembedding`` 注入异步 stub，返回固定形状的 dense 向量。
+- ``openai`` 客户端注入异步 stub，返回固定形状的 dense 向量。
 - ``opensearchpy.helpers.bulk`` 用 ``patch`` 拦截，捕获实际 actions。
 - Qdrant / OpenSearch 客户端实例直接注入 MagicMock（避免触发 lazy
   initialization 走真实网络）。
@@ -33,8 +33,6 @@ Validates: Requirements 4
 from __future__ import annotations
 
 import asyncio
-import sys
-import types
 import uuid
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -59,35 +57,31 @@ from app.services.indexing_service import (  # noqa: E402
 
 
 @pytest.fixture
-def litellm_stub():
-    """注入异步 ``litellm.aembedding`` stub，返回固定 1024 维向量。
+def openai_client_stub():
+    """Patch ``get_openai_client``，注入返回固定 1024 维向量的客户端 stub。
 
     与 ``test_embedding_service.py`` 的 fixture 同模式，但默认 side_effect
     会按输入数量动态生成对应数量的向量，让批量调用自动配齐。
     """
-    original = sys.modules.get("litellm")
-    stub = types.ModuleType("litellm")
+    client = MagicMock()
 
-    async def fake_aembedding(**kwargs: Any) -> MagicMock:
+    async def fake_embeddings_create(**kwargs: Any) -> MagicMock:
         texts = kwargs.get("input", [])
         response = MagicMock()
         # 用与文本数量相等的、互不相同的常量向量，方便断言每条 chunk 拿到
         # 自己的那条（dense_vector[0] = 文本在 batch 中的下标 / 100）。
         response.data = [
-            {"embedding": [(i + 1) / 100.0] * DENSE_VECTOR_DIM}
+            MagicMock(embedding=[(i + 1) / 100.0] * DENSE_VECTOR_DIM)
             for i, _ in enumerate(texts)
         ]
         return response
 
-    stub.aembedding = AsyncMock(side_effect=fake_aembedding)
-    sys.modules["litellm"] = stub
-    try:
-        yield stub
-    finally:
-        if original is not None:
-            sys.modules["litellm"] = original
-        else:
-            sys.modules.pop("litellm", None)
+    client.embeddings.create = AsyncMock(side_effect=fake_embeddings_create)
+    with patch(
+        "app.services.llm_gateway.get_openai_client",
+        return_value=client,
+    ):
+        yield client
 
 
 @pytest.fixture
@@ -140,7 +134,7 @@ class TestEmbedAndIndexIntegration:
     """
 
     def test_embed_then_index_dual_write_uses_consistent_chunk_ids_and_payloads(
-        self, litellm_stub, indexing_service
+        self, openai_client_stub, indexing_service
     ):
         document_id = str(uuid.uuid4())
         space_id = str(uuid.uuid4())
@@ -240,7 +234,7 @@ class TestEmbedAndIndexFailureRollsBackQdrant:
     """
 
     def test_opensearch_failure_triggers_qdrant_rollback_with_exact_ids(
-        self, litellm_stub, indexing_service
+        self, openai_client_stub, indexing_service
     ):
         from app.services.indexing_service import IndexingError
 
@@ -293,7 +287,7 @@ class TestCascadeDeleteAfterIndex:
     """
 
     def test_index_then_delete_document_invokes_both_backends_with_document_id(
-        self, litellm_stub, indexing_service
+        self, openai_client_stub, indexing_service
     ):
         from qdrant_client.models import Filter
 
@@ -365,7 +359,7 @@ class TestPipelineStatusBoundaryAtIndexStage:
     """
 
     def test_index_chunks_task_writes_status_at_entry_and_completion(
-        self, litellm_stub, indexing_service
+        self, openai_client_stub, indexing_service
     ):
         from app.tasks.pipeline import index_chunks
 

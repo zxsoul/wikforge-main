@@ -9,7 +9,7 @@
 
 - ``LLMGateway`` 默认超时回落到 ``Settings.LLM_TIMEOUT``（默认 60 秒），
   且支持通过环境变量调整。
-- ``LLMGateway`` 在 ``acompletion`` 长时间不返回时通过 ``asyncio.wait_for``
+- ``LLMGateway`` 在上游长时间不返回时通过 ``asyncio.wait_for``
   转为 ``LLMGatewayError(reason="timeout")``。
 - ``RAGService.answer`` 把 ``LLMGatewayError`` 映射为
   ``RAGServiceError`` 且复用相同的 ``reason``。
@@ -23,8 +23,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
-import types
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -58,19 +56,15 @@ from app.services.search_service import SearchResponse, SearchResult
 
 
 @pytest.fixture
-def litellm_stub():
-    """把 ``litellm`` 替换为可控 stub，避免依赖真实 LLM。"""
-    original = sys.modules.get("litellm")
-    stub = types.ModuleType("litellm")
-    stub.acompletion = AsyncMock()
-    sys.modules["litellm"] = stub
-    try:
-        yield stub
-    finally:
-        if original is not None:
-            sys.modules["litellm"] = original
-        else:
-            sys.modules.pop("litellm", None)
+def openai_client_stub():
+    """Patch ``get_openai_client``，注入可控客户端 stub，避免依赖真实 LLM。"""
+    client = MagicMock()
+    client.chat.completions.create = AsyncMock()
+    with patch(
+        "app.services.llm_gateway.get_openai_client",
+        return_value=client,
+    ):
+        yield client
 
 
 def _make_search_response(results: list[SearchResult]) -> SearchResponse:
@@ -105,9 +99,9 @@ class TestLLMGatewayDefaultTimeout:
     def test_default_timeout_is_60_seconds(self, mock_settings):
         """未传入 ``timeout`` 时，默认值为 60.0 秒。"""
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
-            LITELLM_API_BASE="",
-            LITELLM_API_KEY="",
+            CHAT_MODEL="gpt-4o",
+            CHAT_API_BASE="",
+            CHAT_API_KEY="",
             LLM_TIMEOUT=60.0,
         )
 
@@ -120,9 +114,9 @@ class TestLLMGatewayDefaultTimeout:
     def test_settings_override_default(self, mock_settings):
         """``Settings.LLM_TIMEOUT`` 可调整默认值。"""
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
-            LITELLM_API_BASE="",
-            LITELLM_API_KEY="",
+            CHAT_MODEL="gpt-4o",
+            CHAT_API_BASE="",
+            CHAT_API_KEY="",
             LLM_TIMEOUT=15.0,
         )
 
@@ -134,9 +128,9 @@ class TestLLMGatewayDefaultTimeout:
     def test_explicit_timeout_overrides_settings(self, mock_settings):
         """显式构造参数始终优先于 Settings。"""
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
-            LITELLM_API_BASE="",
-            LITELLM_API_KEY="",
+            CHAT_MODEL="gpt-4o",
+            CHAT_API_BASE="",
+            CHAT_API_KEY="",
             LLM_TIMEOUT=60.0,
         )
 
@@ -148,17 +142,17 @@ class TestLLMGatewayDefaultTimeout:
     def test_falls_back_to_default_when_settings_missing(self, mock_settings):
         """Settings 缺少 ``LLM_TIMEOUT`` 字段时退回模块默认 60 秒。
 
-        测试场景：旧测试用 ``MagicMock(LITELLM_MODEL=...)`` 构造 settings 时
+        测试场景：旧测试用 ``MagicMock(CHAT_MODEL=...)`` 构造 settings 时
         没列出 ``LLM_TIMEOUT``，``MagicMock`` 默认会返回一个新的 MagicMock，
         ``float(...)`` 会抛错——LLMGateway 必须优雅退化为 60 秒，避免破坏
         现有调用方。
         """
         # 故意不提供 LLM_TIMEOUT，但 MagicMock 会返回一个 MagicMock 对象，
         # 模拟"该字段不存在"的最坏情况。
-        bad_settings = MagicMock(spec=["LITELLM_MODEL", "LITELLM_API_BASE", "LITELLM_API_KEY"])
-        bad_settings.LITELLM_MODEL = "gpt-4o"
-        bad_settings.LITELLM_API_BASE = ""
-        bad_settings.LITELLM_API_KEY = ""
+        bad_settings = MagicMock(spec=["CHAT_MODEL", "CHAT_API_BASE", "CHAT_API_KEY"])
+        bad_settings.CHAT_MODEL = "gpt-4o"
+        bad_settings.CHAT_API_BASE = ""
+        bad_settings.CHAT_API_KEY = ""
         mock_settings.return_value = bad_settings
 
         gateway = LLMGateway()
@@ -173,18 +167,18 @@ class TestLLMGatewayTimeoutMapping:
     """``acompletion`` 长时间无返回 → ``LLMGatewayError(reason="timeout")``。"""
 
     @pytest.mark.asyncio
-    async def test_complete_timeout_maps_to_timeout_reason(self, litellm_stub):
+    async def test_complete_timeout_maps_to_timeout_reason(self, openai_client_stub):
         """``complete`` 超时必须抛 ``LLMGatewayError(reason="timeout")``。"""
         async def _hang(**_kwargs):
             await asyncio.sleep(10)
 
-        litellm_stub.acompletion.side_effect = _hang
+        openai_client_stub.chat.completions.create.side_effect = _hang
 
         with patch("app.services.llm_gateway.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
-                LITELLM_MODEL="gpt-4o",
-                LITELLM_API_BASE="",
-                LITELLM_API_KEY="",
+                CHAT_MODEL="gpt-4o",
+                CHAT_API_BASE="",
+                CHAT_API_KEY="",
                 LLM_TIMEOUT=0.05,
             )
             gateway = LLMGateway()
@@ -197,18 +191,18 @@ class TestLLMGatewayTimeoutMapping:
         assert "0.05" in str(exc_info.value) or "timed out" in str(exc_info.value).lower()
 
     @pytest.mark.asyncio
-    async def test_stream_timeout_maps_to_timeout_reason(self, litellm_stub):
+    async def test_stream_timeout_maps_to_timeout_reason(self, openai_client_stub):
         """``stream`` 在首 chunk 之前超时也必须映射为 ``timeout``。"""
         async def _hang(**_kwargs):
             await asyncio.sleep(10)
 
-        litellm_stub.acompletion.side_effect = _hang
+        openai_client_stub.chat.completions.create.side_effect = _hang
 
         with patch("app.services.llm_gateway.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
-                LITELLM_MODEL="gpt-4o",
-                LITELLM_API_BASE="",
-                LITELLM_API_KEY="",
+                CHAT_MODEL="gpt-4o",
+                CHAT_API_BASE="",
+                CHAT_API_KEY="",
                 LLM_TIMEOUT=0.05,
             )
             gateway = LLMGateway()

@@ -1,7 +1,7 @@
 """Embedding Service: Dense + Sparse vector generation for document chunks.
 
 Provides:
-- Dense embedding generation via LiteLLM (1024 dimensions)
+- Dense embedding generation via OpenAI-compatible API (1024 dimensions)
 - Sparse embedding generation via a deterministic TF-IDF scheme
   (SPLADE-equivalent; see note below)
 - Batch processing with configurable batch size
@@ -122,9 +122,11 @@ class EmbeddingService:
 
         Args:
             model: Embedding model name. Defaults to settings.EMBEDDING_MODEL,
-                falling back to settings.LITELLM_MODEL when unset.
-            api_base: API base URL. Defaults to settings.LITELLM_API_BASE.
-            api_key: API key. Defaults to settings.LITELLM_API_KEY.
+                falling back to settings.CHAT_MODEL when unset.
+            api_base: API base URL. Defaults to settings.EMBEDDING_API_BASE,
+                falling back to settings.CHAT_API_BASE when unset.
+            api_key: API key. Defaults to settings.EMBEDDING_API_KEY,
+                falling back to settings.CHAT_API_KEY when unset.
             batch_size: Number of texts to embed in a single API call.
             dimensions: Target dense vector dimension. Defaults to
                 settings.EMBEDDING_DIMENSIONS (1024). Vectors shorter than this
@@ -141,12 +143,22 @@ class EmbeddingService:
         """
         settings = get_settings()
         # Prefer the dedicated embedding model when configured, otherwise fall
-        # back to the global LiteLLM model so single-gateway deployments keep
+        # back to the global chat model so single-gateway deployments keep
         # working without extra config.
         configured_embedding_model = getattr(settings, "EMBEDDING_MODEL", "") or ""
-        self.model = model or configured_embedding_model or settings.LITELLM_MODEL
-        self.api_base = api_base or settings.LITELLM_API_BASE
-        self.api_key = api_key or settings.LITELLM_API_KEY
+        self.model = model or configured_embedding_model or settings.CHAT_MODEL
+        # Embedding 走独立端点（默认阿里百炼）；未配置时回退到 Chat 端点，
+        # 兼容"一个网关同时提供 chat + embedding"的部署形态。
+        self.api_base = (
+            api_base
+            or getattr(settings, "EMBEDDING_API_BASE", "")
+            or settings.CHAT_API_BASE
+        )
+        self.api_key = (
+            api_key
+            or getattr(settings, "EMBEDDING_API_KEY", "")
+            or settings.CHAT_API_KEY
+        )
         self.batch_size = max(1, batch_size)
         self.dimensions = (
             dimensions
@@ -362,7 +374,10 @@ class EmbeddingService:
         raise EmbeddingError(message) from last_error
 
     async def _call_embedding_api(self, texts: list[str]) -> list[list[float]]:
-        """Call the LiteLLM embedding API for a batch of texts.
+        """Call the OpenAI-compatible embedding API for a batch of texts.
+
+        直连实现（2026-09 重构）：不再经过 LiteLLM Proxy，通过 ``openai`` SDK
+        直连任意 OpenAI 兼容端点（阿里百炼 / OpenAI / CPA 网关等）。
 
         Args:
             texts: Batch of texts to embed
@@ -370,30 +385,19 @@ class EmbeddingService:
         Returns:
             List of embedding vectors normalised to ``self.dimensions``
         """
-        import litellm
+        from app.services.llm_gateway import get_openai_client
 
-        # LiteLLM SDK 通过 model 前缀识别 provider。
-        # 当 model 不含 "/" 时(如 "text-embedding-v4"),默认按 OpenAI 兼容协议调用。
-        # 这样可以无缝走 LiteLLM Proxy / 阿里百炼 / OpenAI 等任意 OpenAI 兼容端点。
-        model = self.model
-        if "/" not in model:
-            model = f"openai/{model}"
-
-        kwargs: dict = {
-            "model": model,
-            "input": texts,
-        }
-        if self.api_base:
-            kwargs["api_base"] = self.api_base
-        if self.api_key:
-            kwargs["api_key"] = self.api_key
-
-        response = await litellm.aembedding(**kwargs)
+        client = get_openai_client(self.api_base, self.api_key)
+        response = await client.embeddings.create(
+            model=self.model,
+            input=texts,
+            timeout=self.timeout,
+        )
 
         # Extract vectors from response
         vectors = []
         for item in response.data:
-            embedding = item["embedding"]
+            embedding = list(item.embedding)
             # Ensure vector is exactly self.dimensions long.
             if len(embedding) < self.dimensions:
                 # Pad with zeros if shorter

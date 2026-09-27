@@ -38,7 +38,9 @@ opensearch-py>=2.8,<3.0
 qdrant-client>=1.12,<1.15
 
 # ---------- Document parsing ----------
-marker-pdf>=1.3,<2.0
+# marker-pdf 已移除（2026-09 瘦身）: 其依赖链会拉入 torch + CUDA 驱动 (~4GB)，
+# 而 PDF_PARSER_MODE=fitz 下其为惰性导入的死代码。如需 PDF_PARSER_MODE=marker
+# 请重新安装 marker-pdf>=1.3,<2.0。
 pypdfium2>=4.30,<5.0
 pymupdf>=1.24,<2.0
 pypdf>=5.1,<6.0
@@ -58,7 +60,8 @@ langchain-text-splitters>=0.3,<0.4
 jieba>=0.42,<0.43
 
 # ---------- LLM gateway ----------
-litellm>=1.55,<2.0
+# 直连 OpenAI 兼容端点（CPA / DashScope / OpenAI 等），替代原 LiteLLM Proxy 方案
+openai>=1.50,<2.0
 
 # ---------- HTTP clients ----------
 httpx>=0.28,<0.29
@@ -88,7 +91,6 @@ mypy>=1.14,<2.0
 psutil>=6.0,<8.0
 
 # ---------- Cross-Encoder reranker ----------
-# 用于 SearchService._cross_encoder_rerank 的真实重排
-# (BAAI/bge-reranker-base 模型权重首次启动时下载, ~400MB)
-# 不装时 SearchService 自动降级到 bigram fallback (检索精度 -10~20%)
-sentence-transformers>=3.0,<5.0
+# sentence-transformers 已移除（2026-09 瘦身）: 其依赖链会拉入 torch (~2GB)，
+# 而 RERANK_PROVIDER=dashscope 下本地 BGE reranker 为惰性导入的死代码。
+# 如需 RERANK_PROVIDER=local 请重新安装 sentence-transformers>=3.0,<5.0。

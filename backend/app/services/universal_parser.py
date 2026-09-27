@@ -206,7 +206,7 @@ class UniversalParser:
                 at 1 to avoid an infinite loop on degenerate configs.
         """
         settings = get_settings()
-        self.model = model or settings.LITELLM_MODEL
+        self.model = model or settings.CHAT_MODEL
 
         # 任务 10.7：vision_model 解析顺序
         # 1) 显式构造参数优先；

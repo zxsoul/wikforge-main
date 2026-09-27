@@ -88,10 +88,11 @@ class Settings(BaseSettings):
     OIDC_CLIENT_SECRET: str = ""
     OIDC_REDIRECT_URI: str = ""
 
-    # LiteLLM
-    LITELLM_API_BASE: str = ""
-    LITELLM_API_KEY: str = ""
-    LITELLM_MODEL: str = "gpt-4o"
+    # Chat 大模型（直连 OpenAI 兼容接口，不再经过 LiteLLM Proxy）
+    # 默认对接 CPA 网关；任何 OpenAI 兼容端点（OpenAI / DeepSeek / 通义 等）均可。
+    CHAT_API_BASE: str = ""
+    CHAT_API_KEY: str = ""
+    CHAT_MODEL: str = "gpt-4o"
 
     # LLM 调用超时（任务 16.7 / 需求 8.7）
     # ``LLMGateway`` 在构造时未显式传入 ``timeout`` 时使用此值。LLM 调用
@@ -103,14 +104,18 @@ class Settings(BaseSettings):
     LLM_TIMEOUT: float = 60.0
 
     # Embedding (任务 12.3) — Dense 向量生成
-    # ``EMBEDDING_MODEL`` 留空表示沿用 ``LITELLM_MODEL``，便于在没有专用 embedding
-    # 网关时直接复用主 LiteLLM 配置。生产环境建议显式配置（如
-    # ``text-embedding-3-large`` / ``bge-large-zh`` / ``ollama/bge-m3``）。
+    # 直连 OpenAI 兼容的 embedding 端点（默认阿里百炼 DashScope）。
+    # ``EMBEDDING_API_BASE`` / ``EMBEDDING_API_KEY`` 留空时回退到
+    # ``CHAT_API_BASE`` / ``CHAT_API_KEY``，便于单一网关部署。
+    EMBEDDING_API_BASE: str = ""
+    EMBEDDING_API_KEY: str = ""
+    # ``EMBEDDING_MODEL`` 留空表示沿用 ``CHAT_MODEL``；生产环境建议显式配置
+    # （如 ``text-embedding-v4`` / ``text-embedding-3-large`` / ``bge-m3``）。
     EMBEDDING_MODEL: str = ""
     # Dense 向量维度。必须与 Qdrant Collection ``document_chunks.dense.size``
     # 保持一致；超出/不足由 EmbeddingService 自行截断/补零。
     EMBEDDING_DIMENSIONS: int = 1024
-    # 单次 LiteLLM aembedding 调用的总超时（秒，含重试前的单次等待）。
+    # 单次 embedding API 调用的总超时（秒，含重试前的单次等待）。
     EMBEDDING_TIMEOUT: float = 30.0
     # 单条文本喂给 embedding API 前允许的最大字符数。超过则截断，避免触发模型
     # 上下文上限或导致整批请求被拒。1024-dim 中文 embedding 模型常见上下文 ~8k tokens，
@@ -167,7 +172,7 @@ class Settings(BaseSettings):
     # 任务 10.7：Universal Parser 模型选择。两者都接受任意 LiteLLM 兼容标识符，例如
     # ``gpt-4o`` / ``gpt-4o-mini`` / ``qwen-vl-max`` / ``minicpm-v`` /
     # ``ollama/minicpm-v:latest`` / ``claude-3-5-sonnet-20241022``。
-    # 留空表示沿用 ``LITELLM_MODEL``，由 LLMGateway 决定具体模型。
+    # 留空表示沿用 ``CHAT_MODEL``，由 LLMGateway 决定具体模型。
     # ``UNIVERSAL_PARSER_VISION_MODEL`` 仅作用于带页面图像的多模态调用；
     # ``UNIVERSAL_PARSER_TEXT_MODEL`` 仅作用于无图像时的纯文本兜底调用。
     UNIVERSAL_PARSER_VISION_MODEL: str = ""

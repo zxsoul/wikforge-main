@@ -42,9 +42,9 @@ class TestLLMGatewayInit:
     def test_default_initialization(self, mock_settings):
         """LLMGateway uses settings defaults when no args provided."""
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
-            LITELLM_API_BASE="https://api.example.com",
-            LITELLM_API_KEY="test-key-123",
+            CHAT_MODEL="gpt-4o",
+            CHAT_API_BASE="https://api.example.com",
+            CHAT_API_KEY="test-key-123",
         )
 
         gateway = LLMGateway()
@@ -58,9 +58,9 @@ class TestLLMGatewayInit:
     def test_custom_initialization(self, mock_settings):
         """LLMGateway uses provided args over settings."""
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
-            LITELLM_API_BASE="",
-            LITELLM_API_KEY="",
+            CHAT_MODEL="gpt-4o",
+            CHAT_API_BASE="",
+            CHAT_API_KEY="",
         )
 
         gateway = LLMGateway(
@@ -79,9 +79,9 @@ class TestLLMGatewayInit:
     def test_multimodal_models_list(self, mock_settings):
         """LLMGateway has a list of known multimodal models."""
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
-            LITELLM_API_BASE="",
-            LITELLM_API_KEY="",
+            CHAT_MODEL="gpt-4o",
+            CHAT_API_BASE="",
+            CHAT_API_KEY="",
         )
 
         gateway = LLMGateway()
@@ -108,7 +108,7 @@ class TestUniversalParserScaffolding:
     def test_constructor_injects_llm_gateway(self, mock_settings):
         """构造函数接受 LLMGateway 依赖注入。"""
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
+            CHAT_MODEL="gpt-4o",
             QUALITY_FALLBACK_THRESHOLD=0.7,
         )
         gateway = MagicMock(spec=LLMGateway)
@@ -123,7 +123,7 @@ class TestUniversalParserScaffolding:
     @patch("app.services.universal_parser.get_settings")
     def test_constructor_creates_default_gateway(self, mock_settings, mock_gateway_cls):
         """未传入 gateway 时，使用 Settings 中的默认模型创建 LLMGateway。"""
-        mock_settings.return_value = MagicMock(LITELLM_MODEL="qwen-vl-max")
+        mock_settings.return_value = MagicMock(CHAT_MODEL="qwen-vl-max")
         sentinel_gateway = MagicMock(spec=LLMGateway)
         mock_gateway_cls.return_value = sentinel_gateway
 
@@ -138,7 +138,7 @@ class TestUniversalParserScaffolding:
     @patch("app.services.universal_parser.get_settings")
     def test_constructor_supports_explicit_model_and_timeout(self, mock_settings):
         """显式传入的模型与超时优先于 Settings。"""
-        mock_settings.return_value = MagicMock(LITELLM_MODEL="gpt-4o")
+        mock_settings.return_value = MagicMock(CHAT_MODEL="gpt-4o")
         gateway = MagicMock(spec=LLMGateway)
 
         parser = UniversalParser(
@@ -156,7 +156,7 @@ class TestUniversalParserScaffolding:
     def test_public_api_signatures(self, mock_settings):
         """公共 API parse / suggest_profile / should_trigger 必须存在且签名正确。"""
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
+            CHAT_MODEL="gpt-4o",
             QUALITY_FALLBACK_THRESHOLD=0.7,
         )
         gateway = MagicMock(spec=LLMGateway)
@@ -181,7 +181,7 @@ class TestUniversalParserScaffolding:
     def test_internal_subroutines_exist(self, mock_settings):
         """内部子例程（10.2 ~ 10.8 实现位）已声明，确保后续子任务无重大重构。"""
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
+            CHAT_MODEL="gpt-4o",
             QUALITY_FALLBACK_THRESHOLD=0.7,
         )
         gateway = MagicMock(spec=LLMGateway)
@@ -1053,7 +1053,7 @@ def _make_parser(dpi: int = 150, lo_timeout: int = 60) -> UniversalParser:
     """Build a UniversalParser with a mocked LLM gateway and pinned settings."""
     with patch("app.services.universal_parser.get_settings") as mock_settings:
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
+            CHAT_MODEL="gpt-4o",
             QUALITY_FALLBACK_THRESHOLD=0.7,
             UNIVERSAL_PARSER_PAGE_DPI=dpi,
             UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=lo_timeout,
@@ -1441,7 +1441,7 @@ def _make_parse_page_parser(
     """
     with patch("app.services.universal_parser.get_settings") as mock_settings:
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
+            CHAT_MODEL="gpt-4o",
             QUALITY_FALLBACK_THRESHOLD=0.7,
             UNIVERSAL_PARSER_PAGE_DPI=150,
             UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=60,
@@ -1707,7 +1707,7 @@ class TestUniversalParserSettingsPlumbing:
     @patch("app.services.universal_parser.get_settings")
     def test_reads_max_raw_text_chars_from_settings(self, mock_settings):
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
+            CHAT_MODEL="gpt-4o",
             QUALITY_FALLBACK_THRESHOLD=0.7,
             UNIVERSAL_PARSER_PAGE_DPI=150,
             UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=60,
@@ -1721,7 +1721,7 @@ class TestUniversalParserSettingsPlumbing:
     @patch("app.services.universal_parser.get_settings")
     def test_constructor_override_wins_over_settings(self, mock_settings):
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
+            CHAT_MODEL="gpt-4o",
             QUALITY_FALLBACK_THRESHOLD=0.7,
             UNIVERSAL_PARSER_PAGE_DPI=150,
             UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=60,
@@ -1736,7 +1736,7 @@ class TestUniversalParserSettingsPlumbing:
     def test_max_raw_text_chars_floor_is_one(self, mock_settings):
         """0 / 负值不允许，避免空提示词被发到 LLM 触发 'empty content' 误判。"""
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
+            CHAT_MODEL="gpt-4o",
             QUALITY_FALLBACK_THRESHOLD=0.7,
             UNIVERSAL_PARSER_PAGE_DPI=150,
             UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=60,
@@ -1768,7 +1768,7 @@ class TestModelSelection:
     @patch("app.services.universal_parser.get_settings")
     def test_constructor_reads_vision_model_from_settings(self, mock_settings):
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
+            CHAT_MODEL="gpt-4o",
             QUALITY_FALLBACK_THRESHOLD=0.7,
             UNIVERSAL_PARSER_PAGE_DPI=150,
             UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=60,
@@ -1785,7 +1785,7 @@ class TestModelSelection:
     @patch("app.services.universal_parser.get_settings")
     def test_constructor_reads_text_model_from_settings(self, mock_settings):
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
+            CHAT_MODEL="gpt-4o",
             QUALITY_FALLBACK_THRESHOLD=0.7,
             UNIVERSAL_PARSER_PAGE_DPI=150,
             UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=60,
@@ -1801,7 +1801,7 @@ class TestModelSelection:
     @patch("app.services.universal_parser.get_settings")
     def test_explicit_vision_model_overrides_settings(self, mock_settings):
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
+            CHAT_MODEL="gpt-4o",
             QUALITY_FALLBACK_THRESHOLD=0.7,
             UNIVERSAL_PARSER_PAGE_DPI=150,
             UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=60,
@@ -1819,7 +1819,7 @@ class TestModelSelection:
     @patch("app.services.universal_parser.get_settings")
     def test_explicit_text_model_overrides_settings(self, mock_settings):
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
+            CHAT_MODEL="gpt-4o",
             QUALITY_FALLBACK_THRESHOLD=0.7,
             UNIVERSAL_PARSER_PAGE_DPI=150,
             UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=60,
@@ -1835,7 +1835,7 @@ class TestModelSelection:
     def test_legacy_model_kwarg_falls_back_to_text_model(self, mock_settings):
         """旧 API ``model=...`` 在新参数缺席时承担 text_model 的角色。"""
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
+            CHAT_MODEL="gpt-4o",
             QUALITY_FALLBACK_THRESHOLD=0.7,
             UNIVERSAL_PARSER_PAGE_DPI=150,
             UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=60,
@@ -1852,7 +1852,7 @@ class TestModelSelection:
     @patch("app.services.universal_parser.get_settings")
     def test_explicit_text_model_wins_over_legacy_model(self, mock_settings):
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
+            CHAT_MODEL="gpt-4o",
             QUALITY_FALLBACK_THRESHOLD=0.7,
             UNIVERSAL_PARSER_PAGE_DPI=150,
             UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=60,
@@ -1875,7 +1875,7 @@ class TestModelSelection:
         """text_model 配置后，文本路径必须透传 ``model=`` 给 gateway。"""
         with patch("app.services.universal_parser.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
-                LITELLM_MODEL="gpt-4o",
+                CHAT_MODEL="gpt-4o",
                 QUALITY_FALLBACK_THRESHOLD=0.7,
                 UNIVERSAL_PARSER_PAGE_DPI=150,
                 UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=60,
@@ -1900,7 +1900,7 @@ class TestModelSelection:
         """text_model 未配置时，文本路径不应传 ``model=``。"""
         with patch("app.services.universal_parser.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
-                LITELLM_MODEL="gpt-4o",
+                CHAT_MODEL="gpt-4o",
                 QUALITY_FALLBACK_THRESHOLD=0.7,
                 UNIVERSAL_PARSER_PAGE_DPI=150,
                 UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=60,
@@ -1926,7 +1926,7 @@ class TestModelSelection:
         """vision_model 未配置时，多模态路径不应传 ``model=``（与 10.3 行为一致）。"""
         with patch("app.services.universal_parser.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
-                LITELLM_MODEL="gpt-4o",
+                CHAT_MODEL="gpt-4o",
                 QUALITY_FALLBACK_THRESHOLD=0.7,
                 UNIVERSAL_PARSER_PAGE_DPI=150,
                 UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=60,
@@ -1953,7 +1953,7 @@ class TestModelSelection:
         """settings 设置的 vision_model 在多模态路径上必须生效。"""
         with patch("app.services.universal_parser.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
-                LITELLM_MODEL="gpt-4o",
+                CHAT_MODEL="gpt-4o",
                 QUALITY_FALLBACK_THRESHOLD=0.7,
                 UNIVERSAL_PARSER_PAGE_DPI=150,
                 UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=60,
@@ -2798,7 +2798,7 @@ class TestPartialFailureDegradation:
     @patch("app.services.universal_parser.get_settings")
     def test_constructor_fallback_chunk_chars_wins_over_settings(self, mock_settings):
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
+            CHAT_MODEL="gpt-4o",
             QUALITY_FALLBACK_THRESHOLD=0.7,
             UNIVERSAL_PARSER_PAGE_DPI=150,
             UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=60,
@@ -2815,7 +2815,7 @@ class TestPartialFailureDegradation:
     @pytest.mark.parametrize("override", [0, -1, -100])
     def test_fallback_chunk_chars_floor_is_one(self, mock_settings, override):
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
+            CHAT_MODEL="gpt-4o",
             QUALITY_FALLBACK_THRESHOLD=0.7,
             UNIVERSAL_PARSER_PAGE_DPI=150,
             UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=60,
@@ -2831,7 +2831,7 @@ class TestPartialFailureDegradation:
     @patch("app.services.universal_parser.get_settings")
     def test_settings_fallback_chunk_chars_is_read(self, mock_settings):
         mock_settings.return_value = MagicMock(
-            LITELLM_MODEL="gpt-4o",
+            CHAT_MODEL="gpt-4o",
             QUALITY_FALLBACK_THRESHOLD=0.7,
             UNIVERSAL_PARSER_PAGE_DPI=150,
             UNIVERSAL_PARSER_LIBREOFFICE_TIMEOUT=60,

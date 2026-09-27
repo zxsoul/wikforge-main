@@ -10,7 +10,7 @@ Tests cover:
 """
 
 import math
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.services.embedding_service import (
@@ -147,38 +147,38 @@ class TestEmbeddingServiceTokenize:
 
 
 class TestEmbeddingServiceDense:
-    """Tests for dense embedding generation via LiteLLM."""
+    """Tests for dense embedding generation via OpenAI-compatible API."""
 
     def setup_method(self):
         """Set up test fixtures."""
         self.service = EmbeddingService()
 
-    @pytest.mark.asyncio
-    @patch("litellm.aembedding")
-    async def test_dense_embedding_calls_litellm(self, mock_aembedding):
-        """Dense embedding should call litellm.aembedding with correct params."""
-        # Mock response
+    @staticmethod
+    def _make_client_mock(mock_get_client, vectors: list[list[float]]):
+        """Configure the patched get_openai_client to return given vectors."""
         mock_response = MagicMock()
-        mock_response.data = [
-            {"embedding": [0.1] * DENSE_VECTOR_DIM},
-        ]
-        mock_aembedding.return_value = mock_response
+        mock_response.data = [MagicMock(embedding=v) for v in vectors]
+        client = mock_get_client.return_value
+        client.embeddings.create = AsyncMock(return_value=mock_response)
+        return client
+
+    @pytest.mark.asyncio
+    @patch("app.services.llm_gateway.get_openai_client")
+    async def test_dense_embedding_calls_api(self, mock_get_client):
+        """Dense embedding should call embeddings.create with correct params."""
+        client = self._make_client_mock(mock_get_client, [[0.1] * DENSE_VECTOR_DIM])
 
         vectors = await self.service._generate_dense_embeddings(["test text"])
 
         assert len(vectors) == 1
         assert len(vectors[0]) == DENSE_VECTOR_DIM
-        mock_aembedding.assert_called_once()
+        client.embeddings.create.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("litellm.aembedding")
-    async def test_dense_embedding_pads_short_vectors(self, mock_aembedding):
+    @patch("app.services.llm_gateway.get_openai_client")
+    async def test_dense_embedding_pads_short_vectors(self, mock_get_client):
         """Dense embedding should pad vectors shorter than 1024 dims."""
-        mock_response = MagicMock()
-        mock_response.data = [
-            {"embedding": [0.5] * 512},  # Only 512 dims
-        ]
-        mock_aembedding.return_value = mock_response
+        self._make_client_mock(mock_get_client, [[0.5] * 512])  # Only 512 dims
 
         vectors = await self.service._generate_dense_embeddings(["test"])
 
@@ -187,48 +187,37 @@ class TestEmbeddingServiceDense:
         assert vectors[0][512] == 0.0  # Padded
 
     @pytest.mark.asyncio
-    @patch("litellm.aembedding")
-    async def test_dense_embedding_truncates_long_vectors(self, mock_aembedding):
+    @patch("app.services.llm_gateway.get_openai_client")
+    async def test_dense_embedding_truncates_long_vectors(self, mock_get_client):
         """Dense embedding should truncate vectors longer than 1024 dims."""
-        mock_response = MagicMock()
-        mock_response.data = [
-            {"embedding": [0.3] * 2048},  # 2048 dims
-        ]
-        mock_aembedding.return_value = mock_response
+        self._make_client_mock(mock_get_client, [[0.3] * 2048])  # 2048 dims
 
         vectors = await self.service._generate_dense_embeddings(["test"])
 
         assert len(vectors[0]) == DENSE_VECTOR_DIM
 
     @pytest.mark.asyncio
-    @patch("litellm.aembedding")
-    async def test_dense_embedding_batching(self, mock_aembedding):
+    @patch("app.services.llm_gateway.get_openai_client")
+    async def test_dense_embedding_batching(self, mock_get_client):
         """Dense embedding should batch texts according to batch_size."""
         self.service.batch_size = 2
-
-        mock_response = MagicMock()
-        mock_response.data = [
-            {"embedding": [0.1] * DENSE_VECTOR_DIM},
-            {"embedding": [0.2] * DENSE_VECTOR_DIM},
-        ]
-        mock_aembedding.return_value = mock_response
+        client = self._make_client_mock(
+            mock_get_client,
+            [[0.1] * DENSE_VECTOR_DIM, [0.2] * DENSE_VECTOR_DIM],
+        )
 
         texts = ["text1", "text2", "text3", "text4"]
         vectors = await self.service._generate_dense_embeddings(texts)
 
         # Should be called twice (2 batches of 2)
-        assert mock_aembedding.call_count == 2
+        assert client.embeddings.create.call_count == 2
         assert len(vectors) == 4
 
     @pytest.mark.asyncio
-    @patch("litellm.aembedding")
-    async def test_embed_chunks_combines_dense_and_sparse(self, mock_aembedding):
+    @patch("app.services.llm_gateway.get_openai_client")
+    async def test_embed_chunks_combines_dense_and_sparse(self, mock_get_client):
         """embed_chunks should return both dense and sparse vectors."""
-        mock_response = MagicMock()
-        mock_response.data = [
-            {"embedding": [0.1] * DENSE_VECTOR_DIM},
-        ]
-        mock_aembedding.return_value = mock_response
+        self._make_client_mock(mock_get_client, [[0.1] * DENSE_VECTOR_DIM])
 
         chunks = [{"id": "chunk-1", "text": "Hello world testing"}]
         results = await self.service.embed_chunks(chunks)
@@ -240,12 +229,12 @@ class TestEmbeddingServiceDense:
         assert len(results[0].sparse_values) > 0
 
     @pytest.mark.asyncio
-    @patch("litellm.aembedding")
-    async def test_embed_chunks_empty_list(self, mock_aembedding):
+    @patch("app.services.llm_gateway.get_openai_client")
+    async def test_embed_chunks_empty_list(self, mock_get_client):
         """embed_chunks with empty list should return empty results."""
         results = await self.service.embed_chunks([])
         assert results == []
-        mock_aembedding.assert_not_called()
+        mock_get_client.return_value.embeddings.create.assert_not_called()
 
 
 # ─── Indexing Service Tests ────────────────────────────────────────────

@@ -3,15 +3,15 @@
 仅覆盖 Dense 向量相关行为；Sparse 向量由任务 12.4 单独测试，已在
 ``tests/test_indexing.py`` 中保留。
 
-由于本地 venv 不一定安装 ``litellm``，本测试模块通过 ``sys.modules`` 注入
-一个可控的 stub，避免在 CI 上必须安装大体量依赖。
+2026-09 重构：EmbeddingService 不再调用 litellm SDK，改为通过
+``openai`` SDK 直连 OpenAI 兼容端点（默认阿里百炼）。测试通过 patch
+``app.services.llm_gateway.get_openai_client`` 注入可控客户端 stub，
+避免依赖真实网络与大体量依赖。
 """
 
 from __future__ import annotations
 
 import asyncio
-import sys
-import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -24,34 +24,54 @@ from app.services.embedding_service import (
 )
 
 
-# ─── litellm stub ────────────────────────────────────────────────────
+# ─── openai client stub ──────────────────────────────────────────────
 
 
 @pytest.fixture
-def litellm_stub():
-    """注入可控的 ``litellm`` 模块，并保证 ``aembedding`` 是 AsyncMock。
+def openai_client_stub():
+    """Patch ``get_openai_client``，注入可控的 AsyncOpenAI 客户端 stub。
 
-    yield 出 stub 模块，测试可通过 ``litellm_stub.aembedding`` 直接配置返回值
-    或抛出异常。退出时还原 ``sys.modules``。
+    yield 出 ``(client, get_client_mock)``：
+    - ``client.embeddings.create`` 是 AsyncMock，可设置返回值/异常；
+    - ``get_client_mock`` 可断言客户端以哪个 (api_base, api_key) 被获取。
     """
-    original = sys.modules.get("litellm")
-    stub = types.ModuleType("litellm")
-    stub.aembedding = AsyncMock()
-    sys.modules["litellm"] = stub
-    try:
-        yield stub
-    finally:
-        if original is not None:
-            sys.modules["litellm"] = original
-        else:
-            sys.modules.pop("litellm", None)
+    client = MagicMock()
+    client.embeddings.create = AsyncMock()
+    with patch(
+        "app.services.llm_gateway.get_openai_client",
+        return_value=client,
+    ) as get_client_mock:
+        yield client, get_client_mock
 
 
 def _make_response(vectors: list[list[float]]) -> MagicMock:
-    """构造一个 ``litellm.aembedding`` 的响应对象。"""
+    """构造一个 ``embeddings.create`` 的响应对象（item.embedding 属性）。"""
     response = MagicMock()
-    response.data = [{"embedding": v} for v in vectors]
+    response.data = [MagicMock(embedding=v) for v in vectors]
     return response
+
+
+def _make_settings(
+    chat_model: str = "gpt-4o",
+    embedding_model: str = "",
+    chat_api_base: str = "",
+    chat_api_key: str = "",
+    embedding_api_base: str = "",
+    embedding_api_key: str = "",
+) -> MagicMock:
+    """构造符合新配置命名（CHAT_* / EMBEDDING_*）的 stub Settings。"""
+    return MagicMock(
+        CHAT_MODEL=chat_model,
+        CHAT_API_BASE=chat_api_base,
+        CHAT_API_KEY=chat_api_key,
+        EMBEDDING_MODEL=embedding_model,
+        EMBEDDING_API_BASE=embedding_api_base,
+        EMBEDDING_API_KEY=embedding_api_key,
+        EMBEDDING_DIMENSIONS=1024,
+        EMBEDDING_TIMEOUT=30.0,
+        EMBEDDING_MAX_INPUT_CHARS=6000,
+        EMBEDDING_MAX_RETRIES=2,
+    )
 
 
 # ─── 配置默认值 ───────────────────────────────────────────────────────
@@ -67,36 +87,44 @@ class TestEmbeddingServiceConfiguration:
         assert DENSE_VECTOR_DIM == 1024
 
     def test_constructor_reads_embedding_model_from_settings(self):
-        """优先使用专用 EMBEDDING_MODEL；未配置时回退到 LITELLM_MODEL。"""
+        """优先使用专用 EMBEDDING_MODEL；未配置时回退到 CHAT_MODEL。"""
         with patch("app.services.embedding_service.get_settings") as mock_settings:
-            mock_settings.return_value = MagicMock(
-                EMBEDDING_MODEL="text-embedding-3-large",
-                LITELLM_MODEL="gpt-4o",
-                LITELLM_API_BASE="",
-                LITELLM_API_KEY="",
-                EMBEDDING_DIMENSIONS=1024,
-                EMBEDDING_TIMEOUT=30.0,
-                EMBEDDING_MAX_INPUT_CHARS=6000,
-                EMBEDDING_MAX_RETRIES=2,
+            mock_settings.return_value = _make_settings(
+                embedding_model="text-embedding-3-large",
             )
             service = EmbeddingService()
             assert service.model == "text-embedding-3-large"
 
-    def test_constructor_falls_back_to_litellm_model(self):
-        """EMBEDDING_MODEL 为空字符串时，必须回退到 LITELLM_MODEL。"""
+    def test_constructor_falls_back_to_chat_model(self):
+        """EMBEDDING_MODEL 为空字符串时，必须回退到 CHAT_MODEL。"""
         with patch("app.services.embedding_service.get_settings") as mock_settings:
-            mock_settings.return_value = MagicMock(
-                EMBEDDING_MODEL="",
-                LITELLM_MODEL="gpt-4o",
-                LITELLM_API_BASE="",
-                LITELLM_API_KEY="",
-                EMBEDDING_DIMENSIONS=1024,
-                EMBEDDING_TIMEOUT=30.0,
-                EMBEDDING_MAX_INPUT_CHARS=6000,
-                EMBEDDING_MAX_RETRIES=2,
-            )
+            mock_settings.return_value = _make_settings(embedding_model="")
             service = EmbeddingService()
             assert service.model == "gpt-4o"
+
+    def test_constructor_prefers_embedding_endpoint_over_chat(self):
+        """配置了 EMBEDDING_API_BASE/KEY 时优先于 CHAT_API_BASE/KEY。"""
+        with patch("app.services.embedding_service.get_settings") as mock_settings:
+            mock_settings.return_value = _make_settings(
+                chat_api_base="https://chat.example.com/v1",
+                chat_api_key="chat-key",
+                embedding_api_base="https://dashscope.aliyuncs.com/compatible-mode/v1",
+                embedding_api_key="ali-key",
+            )
+            service = EmbeddingService()
+            assert service.api_base == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            assert service.api_key == "ali-key"
+
+    def test_constructor_falls_back_to_chat_endpoint(self):
+        """EMBEDDING_API_BASE/KEY 为空时回退到 CHAT_API_BASE/KEY。"""
+        with patch("app.services.embedding_service.get_settings") as mock_settings:
+            mock_settings.return_value = _make_settings(
+                chat_api_base="https://chat.example.com/v1",
+                chat_api_key="chat-key",
+            )
+            service = EmbeddingService()
+            assert service.api_base == "https://chat.example.com/v1"
+            assert service.api_key == "chat-key"
 
     def test_explicit_args_override_settings(self):
         """显式参数优先于 Settings。"""
@@ -127,9 +155,10 @@ class TestDenseEmbeddingShape:
     """1024 维输出、批量、空输入。"""
 
     @pytest.mark.asyncio
-    async def test_returns_1024_dim_vectors(self, litellm_stub):
+    async def test_returns_1024_dim_vectors(self, openai_client_stub):
         """每个向量长度必须等于 1024 维（Qdrant 维度）。"""
-        litellm_stub.aembedding.return_value = _make_response(
+        client, _ = openai_client_stub
+        client.embeddings.create.return_value = _make_response(
             [[0.1] * 1024, [0.2] * 1024]
         )
         service = EmbeddingService()
@@ -144,9 +173,10 @@ class TestDenseEmbeddingShape:
             assert len(r.dense_vector) == 1024
 
     @pytest.mark.asyncio
-    async def test_pads_short_vectors_to_dimensions(self, litellm_stub):
+    async def test_pads_short_vectors_to_dimensions(self, openai_client_stub):
         """API 返回不足 1024 维时，必须用 0 补齐。"""
-        litellm_stub.aembedding.return_value = _make_response([[0.5] * 512])
+        client, _ = openai_client_stub
+        client.embeddings.create.return_value = _make_response([[0.5] * 512])
         service = EmbeddingService()
         results = await service.embed_chunks([{"id": "c", "text": "x"}])
         v = results[0].dense_vector
@@ -156,25 +186,28 @@ class TestDenseEmbeddingShape:
         assert v[1023] == 0.0
 
     @pytest.mark.asyncio
-    async def test_truncates_long_vectors_to_dimensions(self, litellm_stub):
+    async def test_truncates_long_vectors_to_dimensions(self, openai_client_stub):
         """API 返回多于 1024 维时，必须截断。"""
-        litellm_stub.aembedding.return_value = _make_response([[0.3] * 4096])
+        client, _ = openai_client_stub
+        client.embeddings.create.return_value = _make_response([[0.3] * 4096])
         service = EmbeddingService()
         results = await service.embed_chunks([{"id": "c", "text": "x"}])
         assert len(results[0].dense_vector) == 1024
 
     @pytest.mark.asyncio
-    async def test_empty_input_returns_empty_list(self, litellm_stub):
-        """空 chunk 列表必须直接返回 []，不调用 LiteLLM。"""
+    async def test_empty_input_returns_empty_list(self, openai_client_stub):
+        """空 chunk 列表必须直接返回 []，不调用 embedding API。"""
+        client, _ = openai_client_stub
         service = EmbeddingService()
         results = await service.embed_chunks([])
         assert results == []
-        litellm_stub.aembedding.assert_not_called()
+        client.embeddings.create.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_preserves_chunk_ids(self, litellm_stub):
+    async def test_preserves_chunk_ids(self, openai_client_stub):
         """每个 EmbeddingResult.chunk_id 必须与输入一一对应。"""
-        litellm_stub.aembedding.return_value = _make_response(
+        client, _ = openai_client_stub
+        client.embeddings.create.return_value = _make_response(
             [[0.0] * 1024, [0.0] * 1024, [0.0] * 1024]
         )
         service = EmbeddingService()
@@ -191,78 +224,66 @@ class TestDenseEmbeddingShape:
 
 
 class TestDenseEmbeddingBatching:
-    """按 batch_size 分批调用 LiteLLM。"""
+    """按 batch_size 分批调用 embedding API。"""
 
     @pytest.mark.asyncio
-    async def test_splits_into_batches_by_batch_size(self, litellm_stub):
+    async def test_splits_into_batches_by_batch_size(self, openai_client_stub):
         """5 条文本、batch_size=2 应产生 3 次 API 调用。"""
+        client, _ = openai_client_stub
+
         # 每次调用根据传入数量返回等量向量。
         async def fake_embed(**kwargs):
             n = len(kwargs["input"])
             return _make_response([[0.1] * 1024 for _ in range(n)])
 
-        litellm_stub.aembedding.side_effect = fake_embed
+        client.embeddings.create.side_effect = fake_embed
         service = EmbeddingService(batch_size=2)
         chunks = [{"id": f"c-{i}", "text": f"t{i}"} for i in range(5)]
         results = await service.embed_chunks(chunks)
         assert len(results) == 5
-        assert litellm_stub.aembedding.call_count == 3
+        assert client.embeddings.create.call_count == 3
 
     @pytest.mark.asyncio
-    async def test_passes_correct_model_to_litellm(self, litellm_stub):
-        """LiteLLM 调用必须使用配置的 model 参数。
-
-        EmbeddingService 会给不带 provider 前缀的 model 自动加 ``openai/``,
-        以便走 LiteLLM 的 OpenAI 兼容协议路由 (适配 LiteLLM Proxy / 阿里 / OpenAI)。
-        """
-        litellm_stub.aembedding.return_value = _make_response([[0.0] * 1024])
+    async def test_passes_correct_model_to_api(self, openai_client_stub):
+        """embedding 调用必须原样使用配置的 model 参数。"""
+        client, _ = openai_client_stub
+        client.embeddings.create.return_value = _make_response([[0.0] * 1024])
         service = EmbeddingService(model="bge-large-zh", batch_size=4)
         await service.embed_chunks([{"id": "c", "text": "hi"}])
-        kwargs = litellm_stub.aembedding.call_args.kwargs
-        assert kwargs["model"] == "openai/bge-large-zh"
+        kwargs = client.embeddings.create.call_args.kwargs
+        assert kwargs["model"] == "bge-large-zh"
         assert kwargs["input"] == ["hi"]
 
     @pytest.mark.asyncio
-    async def test_passes_api_base_and_key_when_set(self, litellm_stub):
-        """配置了 api_base / api_key 时必须透传给 LiteLLM。"""
-        litellm_stub.aembedding.return_value = _make_response([[0.0] * 1024])
+    async def test_passes_api_base_and_key_to_client(self, openai_client_stub):
+        """配置的 api_base / api_key 必须用于获取 openai 客户端。"""
+        client, get_client_mock = openai_client_stub
+        client.embeddings.create.return_value = _make_response([[0.0] * 1024])
         service = EmbeddingService(
             api_base="https://gateway.example.com",
             api_key="sk-test",
         )
         await service.embed_chunks([{"id": "c", "text": "hi"}])
-        kwargs = litellm_stub.aembedding.call_args.kwargs
-        assert kwargs["api_base"] == "https://gateway.example.com"
-        assert kwargs["api_key"] == "sk-test"
+        get_client_mock.assert_called_with("https://gateway.example.com", "sk-test")
 
     @pytest.mark.asyncio
-    async def test_omits_optional_kwargs_when_blank(self, litellm_stub, monkeypatch):
-        """空字符串 api_base / api_key 不应作为参数透传，避免覆盖默认。
+    async def test_blank_endpoint_falls_back_to_blank_client(
+        self, openai_client_stub, monkeypatch
+    ):
+        """settings 与显式参数均为空时，以空端点获取客户端（SDK 用默认）。
 
         显式 mock settings 让所有相关字段为空,以隔离测试环境的真实 .env。
         """
-        from unittest.mock import MagicMock
-
-        mock_settings = MagicMock()
-        mock_settings.LITELLM_MODEL = "gpt-4o"
-        mock_settings.LITELLM_API_BASE = ""
-        mock_settings.LITELLM_API_KEY = ""
-        mock_settings.EMBEDDING_MODEL = ""
-        mock_settings.EMBEDDING_DIMENSIONS = 1024
-        mock_settings.EMBEDDING_TIMEOUT = 30.0
-        mock_settings.EMBEDDING_MAX_INPUT_CHARS = 6000
-        mock_settings.EMBEDDING_MAX_RETRIES = 2
         monkeypatch.setattr(
             "app.services.embedding_service.get_settings",
-            lambda: mock_settings,
+            lambda: _make_settings(),
         )
 
-        litellm_stub.aembedding.return_value = _make_response([[0.0] * 1024])
+        client, get_client_mock = openai_client_stub
+        client.embeddings.create.return_value = _make_response([[0.0] * 1024])
         service = EmbeddingService(api_base="", api_key="")
         await service.embed_chunks([{"id": "c", "text": "hi"}])
-        kwargs = litellm_stub.aembedding.call_args.kwargs
-        assert "api_base" not in kwargs
-        assert "api_key" not in kwargs
+        get_client_mock.assert_called_with("", "")
 
 
 # ─── 输入截断 ────────────────────────────────────────────────────────
@@ -272,31 +293,34 @@ class TestDenseEmbeddingInputTruncation:
     """超长文本必须截断；空字符串必须替换。"""
 
     @pytest.mark.asyncio
-    async def test_long_text_is_truncated_before_call(self, litellm_stub):
+    async def test_long_text_is_truncated_before_call(self, openai_client_stub):
         """超过 max_input_chars 的文本被裁剪到 max_input_chars。"""
-        litellm_stub.aembedding.return_value = _make_response([[0.0] * 1024])
+        client, _ = openai_client_stub
+        client.embeddings.create.return_value = _make_response([[0.0] * 1024])
         service = EmbeddingService(max_input_chars=50)
         long_text = "x" * 1000
         await service.embed_chunks([{"id": "c", "text": long_text}])
-        passed = litellm_stub.aembedding.call_args.kwargs["input"][0]
+        passed = client.embeddings.create.call_args.kwargs["input"][0]
         assert len(passed) == 50
 
     @pytest.mark.asyncio
-    async def test_short_text_is_unchanged(self, litellm_stub):
+    async def test_short_text_is_unchanged(self, openai_client_stub):
         """短文本必须按原样发送。"""
-        litellm_stub.aembedding.return_value = _make_response([[0.0] * 1024])
+        client, _ = openai_client_stub
+        client.embeddings.create.return_value = _make_response([[0.0] * 1024])
         service = EmbeddingService(max_input_chars=50)
         await service.embed_chunks([{"id": "c", "text": "hello world"}])
-        passed = litellm_stub.aembedding.call_args.kwargs["input"][0]
+        passed = client.embeddings.create.call_args.kwargs["input"][0]
         assert passed == "hello world"
 
     @pytest.mark.asyncio
-    async def test_empty_text_replaced_with_space(self, litellm_stub):
+    async def test_empty_text_replaced_with_space(self, openai_client_stub):
         """空字符串会被替换为单空格，避免被 embedding API 拒绝。"""
-        litellm_stub.aembedding.return_value = _make_response([[0.0] * 1024])
+        client, _ = openai_client_stub
+        client.embeddings.create.return_value = _make_response([[0.0] * 1024])
         service = EmbeddingService()
         await service.embed_chunks([{"id": "c", "text": ""}])
-        passed = litellm_stub.aembedding.call_args.kwargs["input"][0]
+        passed = client.embeddings.create.call_args.kwargs["input"][0]
         assert passed != ""
         assert passed.strip() == ""
 
@@ -308,9 +332,10 @@ class TestDenseEmbeddingErrorHandling:
     """超时、API 错误、重试。"""
 
     @pytest.mark.asyncio
-    async def test_api_failure_raises_embedding_error(self, litellm_stub):
-        """LiteLLM 抛错时必须包装成 EmbeddingError 并暴露上下文。"""
-        litellm_stub.aembedding.side_effect = RuntimeError("upstream 503")
+    async def test_api_failure_raises_embedding_error(self, openai_client_stub):
+        """API 抛错时必须包装成 EmbeddingError 并暴露上下文。"""
+        client, _ = openai_client_stub
+        client.embeddings.create.side_effect = RuntimeError("upstream 503")
         # max_retries=0 让失败直接到达终态，避免测试等待 backoff。
         service = EmbeddingService(max_retries=0, timeout=1.0, model="bge-m3")
         with pytest.raises(EmbeddingError) as exc_info:
@@ -323,21 +348,23 @@ class TestDenseEmbeddingErrorHandling:
         assert isinstance(exc_info.value.__cause__, RuntimeError)
 
     @pytest.mark.asyncio
-    async def test_timeout_raises_embedding_error(self, litellm_stub):
+    async def test_timeout_raises_embedding_error(self, openai_client_stub):
         """单批次超过 timeout 时必须抛 EmbeddingError。"""
+        client, _ = openai_client_stub
 
         async def slow_embed(**kwargs):
             await asyncio.sleep(0.5)
             return _make_response([[0.0] * 1024])
 
-        litellm_stub.aembedding.side_effect = slow_embed
+        client.embeddings.create.side_effect = slow_embed
         service = EmbeddingService(max_retries=0, timeout=0.05)
         with pytest.raises(EmbeddingError):
             await service.embed_chunks([{"id": "c", "text": "x"}])
 
     @pytest.mark.asyncio
-    async def test_retries_then_succeeds(self, litellm_stub, monkeypatch):
+    async def test_retries_then_succeeds(self, openai_client_stub, monkeypatch):
         """前两次失败、第三次成功必须最终返回向量。"""
+        client, _ = openai_client_stub
         # 让 backoff 不消耗实际墙钟时间。
         monkeypatch.setattr(
             "app.services.embedding_service.asyncio.sleep",
@@ -351,7 +378,7 @@ class TestDenseEmbeddingErrorHandling:
                 raise RuntimeError("transient")
             return _make_response([[0.7] * 1024])
 
-        litellm_stub.aembedding.side_effect = flaky
+        client.embeddings.create.side_effect = flaky
         service = EmbeddingService(max_retries=2, timeout=1.0)
         results = await service.embed_chunks([{"id": "c", "text": "x"}])
         assert calls["n"] == 3
@@ -360,14 +387,15 @@ class TestDenseEmbeddingErrorHandling:
         assert results[0].dense_vector[0] == 0.7
 
     @pytest.mark.asyncio
-    async def test_exhausts_retries_then_fails(self, litellm_stub, monkeypatch):
+    async def test_exhausts_retries_then_fails(self, openai_client_stub, monkeypatch):
         """重试用尽仍失败时抛 EmbeddingError，调用次数 = max_retries+1。"""
+        client, _ = openai_client_stub
         monkeypatch.setattr(
             "app.services.embedding_service.asyncio.sleep",
             AsyncMock(),
         )
-        litellm_stub.aembedding.side_effect = RuntimeError("permanent")
+        client.embeddings.create.side_effect = RuntimeError("permanent")
         service = EmbeddingService(max_retries=2, timeout=1.0)
         with pytest.raises(EmbeddingError):
             await service.embed_chunks([{"id": "c", "text": "x"}])
-        assert litellm_stub.aembedding.call_count == 3
+        assert client.embeddings.create.call_count == 3
