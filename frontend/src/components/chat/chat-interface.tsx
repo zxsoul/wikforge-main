@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { MessageBubble, StreamingBubble } from "./message-bubble";
 import { useChatStore, type ChatMessage, type Citation } from "@/stores/chat-store";
 import { apiClient } from "@/lib/api-client";
+import { generateUUID } from "@/lib/utils";
 
 const MAX_INPUT_LENGTH = 2000;
 const STREAM_TIMEOUT_MS = 30000;
@@ -53,7 +54,7 @@ export function ChatInterface() {
 
     // Add user message
     const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       role: "user",
       content: trimmed,
       created_at: new Date().toISOString(),
@@ -120,7 +121,7 @@ export function ChatInterface() {
       // Add assistant message
       if (fullContent) {
         const assistantMessage: ChatMessage = {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           role: "assistant",
           content: fullContent,
           citations: citations.length > 0 ? citations : undefined,
