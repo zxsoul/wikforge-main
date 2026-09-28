@@ -7,6 +7,9 @@ RUN npm ci --only=production
 # Stage 2: Build
 FROM node:20-alpine AS builder
 WORKDIR /app
+# NEXT_PUBLIC_* 变量在 next build 时内联进浏览器端 JS，必须在构建期注入
+ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 COPY package.json package-lock.json* ./
 RUN npm ci
 COPY . .
