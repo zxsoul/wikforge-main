@@ -188,6 +188,25 @@ async def login(
     return TokenResponse(**token_pair)
 
 
+@router.post("/guest-login", response_model=TokenResponse)
+async def guest_login(
+    auth_service: AuthService = Depends(get_auth_service),
+) -> TokenResponse:
+    """游客一键登录（演示/面试场景）。
+
+    游客账号由服务端环境变量 GUEST_EMAIL / GUEST_PASSWORD 指定，
+    密码不出现在前端代码中。未配置时返回 404，前端隐藏入口。
+    """
+    from fastapi import HTTPException
+
+    guest_email = os.environ.get("GUEST_EMAIL", "").strip()
+    guest_password = os.environ.get("GUEST_PASSWORD", "")
+    if not guest_email or not guest_password:
+        raise HTTPException(status_code=404, detail="当前部署未启用游客登录")
+    token_pair = await auth_service.login(email=guest_email, password=guest_password)
+    return TokenResponse(**token_pair)
+
+
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(
     body: RefreshRequest,

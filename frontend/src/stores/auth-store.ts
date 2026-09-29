@@ -12,6 +12,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  guestLogin: () => Promise<void>;
   logout: () => void;
   setUser: (user: User | null) => void;
   checkAuth: () => Promise<void>;
@@ -31,6 +32,18 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     apiClient.setTokens(data.access_token, data.refresh_token);
     set({ user: data.user, isAuthenticated: true });
+  },
+
+  guestLogin: async () => {
+    // 游客一键登录：账号由服务端 GUEST_EMAIL/GUEST_PASSWORD 决定
+    const data = await apiClient.post<{
+      access_token: string;
+      refresh_token: string;
+      user: User;
+    }>("/api/auth/guest-login", undefined, { skipAuth: true });
+
+    apiClient.setTokens(data.access_token, data.refresh_token);
+    set({ user: data.user ?? null, isAuthenticated: true });
   },
 
   logout: () => {

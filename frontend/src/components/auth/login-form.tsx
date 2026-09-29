@@ -21,6 +21,25 @@ export function LoginForm() {
   const [error, setError] = useState("");
   const [lockoutMessage, setLockoutMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isGuestLoading, setIsGuestLoading] = useState(false);
+  const guestLogin = useAuthStore((state) => state.guestLogin);
+
+  const handleGuestLogin = async () => {
+    setError("");
+    setIsGuestLoading(true);
+    try {
+      await guestLogin();
+      router.push("/dashboard");
+    } catch (err) {
+      if (err instanceof ApiClientError && err.status === 404) {
+        setError("当前部署未启用游客登录");
+      } else {
+        setError("游客登录失败，请稍后重试");
+      }
+    } finally {
+      setIsGuestLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,6 +141,17 @@ export function LoginForm() {
       <Button type="submit" className="w-full" disabled={isLoading}>
         {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         登录
+      </Button>
+
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        disabled={isLoading || isGuestLoading}
+        onClick={handleGuestLogin}
+      >
+        {isGuestLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        🎯 游客体验（免注册，面试官专用）
       </Button>
 
       <div className="relative my-4">
