@@ -23,6 +23,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useSidebarStore } from "@/stores/sidebar-store";
+import { useAuthStore } from "@/stores/auth-store";
 import { WikforgeLogo } from "@/components/brand/logo";
 
 const navItems = [
@@ -64,6 +65,7 @@ const adminItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const { isCollapsed, toggle } = useSidebarStore();
+  const user = useAuthStore((state) => state.user);
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -143,7 +145,8 @@ export function Sidebar() {
 
             <Separator className="my-2" />
 
-            {adminItems.map((item) => {
+            {/* 管理菜单仅对管理员可见（后端 /api/auth/me 返回 is_admin） */}
+            {user?.is_admin && adminItems.map((item) => {
               const isActive = pathname.startsWith(item.href);
               const NavLink = (
                 <Link
