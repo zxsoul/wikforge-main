@@ -691,3 +691,131 @@ async def get_document_download_url(
         raise HTTPException(status_code=500, detail="生成下载链接失败")
 
     return DocumentDownloadResponse(url=url, expires_in=expires_in)
+
+
+# ─── 文档详情 + 内容呈现（对话引用 / 搜索结果跳转目标）─────────────────
+
+
+class DocumentDetailResponse(BaseModel):
+    """文档元信息，用于文档详情页头部展示。"""
+
+    id: uuid.UUID
+    title: str
+    file_type: str
+    file_size: int
+    status: str
+    space_id: uuid.UUID
+    created_at: str
+    updated_at: str
+
+
+class DocumentChunkItem(BaseModel):
+    """单个分块（与对话引用的 chunk_index 对应，支持高亮定位）。"""
+
+    chunk_id: str
+    chunk_index: int
+    content: str
+    page_number: int | None = None
+    title_chain: str | None = None
+
+
+class DocumentChunksResponse(BaseModel):
+    document_id: uuid.UUID
+    total: int
+    chunks: list[DocumentChunkItem]
+
+
+async def _load_doc_with_permission(
+    document_id: uuid.UUID, current_user: User, db: AsyncSession
+):
+    """加载文档并校验空间访问权限（admin 全通）。返回 Document 行。"""
+    from fastapi import HTTPException
+
+    from app.models.document import Document
+
+    doc = (
+        await db.execute(select(Document).where(Document.id == document_id))
+    ).scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(status_code=404, detail="文档不存在")
+
+    allowed = await _get_user_allowed_space_ids(current_user, db)
+    if allowed is not None and doc.space_id not in allowed:
+        raise HTTPException(status_code=403, detail="无权访问该文档")
+    return doc
+
+
+@router.get("/api/documents/{document_id}", response_model=DocumentDetailResponse)
+async def get_document_detail(
+    document_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentDetailResponse:
+    """文档元信息。对话引用 / 搜索结果点击后的详情页头部用。"""
+    doc = await _load_doc_with_permission(document_id, current_user, db)
+    return DocumentDetailResponse(
+        id=doc.id,
+        title=doc.title,
+        file_type=doc.file_type,
+        file_size=doc.file_size,
+        status=str(doc.status.value if hasattr(doc.status, "value") else doc.status),
+        space_id=doc.space_id,
+        created_at=doc.created_at.isoformat(),
+        updated_at=doc.updated_at.isoformat(),
+    )
+
+
+@router.get(
+    "/api/documents/{document_id}/chunks",
+    response_model=DocumentChunksResponse,
+)
+async def get_document_chunks(
+    document_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentChunksResponse:
+    """按 chunk_index 顺序返回文档的全部分块内容。
+
+    数据来自 OpenSearch（BM25 索引中的原文 content），
+    前端文档详情页据此渲染全文，并支持 ?highlight=<chunk_index> 定位。
+    """
+    from fastapi import HTTPException
+
+    from app.core.opensearch import INDEX_NAME, get_opensearch_client
+
+    await _load_doc_with_permission(document_id, current_user, db)
+
+    client = get_opensearch_client()
+    try:
+        resp = client.search(
+            index=INDEX_NAME,
+            body={
+                "query": {"term": {"document_id": str(document_id)}},
+                "sort": [{"chunk_index": "asc"}],
+                "size": 1000,
+                "_source": [
+                    "chunk_id",
+                    "chunk_index",
+                    "content",
+                    "page_number",
+                    "title_chain",
+                ],
+            },
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"检索引擎查询失败: {exc}")
+
+    hits = resp.get("hits", {}).get("hits", [])
+    chunks = [
+        DocumentChunkItem(
+            chunk_id=h["_source"].get("chunk_id", ""),
+            chunk_index=h["_source"].get("chunk_index", 0),
+            content=h["_source"].get("content", ""),
+            page_number=h["_source"].get("page_number"),
+            title_chain=h["_source"].get("title_chain") or None,
+        )
+        for h in hits
+    ]
+    return DocumentChunksResponse(
+        document_id=document_id, total=len(chunks), chunks=chunks
+    )
