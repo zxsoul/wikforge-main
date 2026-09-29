@@ -121,6 +121,10 @@ class RAGEngine:
         self._search_service = search_service or SearchService()
         self._llm_gateway = llm_gateway
         self._redis = redis_client
+        # 最近一次 chat() 调用的结果元信息（供 SSE 层在流结束后读取）：
+        # 引擎实例由 get_rag_engine 按请求创建，不存在并发串扰。
+        self.last_citations: list[dict] = []
+        self.last_session_id: str | None = None
 
     def _get_llm_gateway(self, config: RAGConfig) -> LLMGateway:
         """Get or create LLM gateway with config-specific settings."""
@@ -198,6 +202,9 @@ class RAGEngine:
                 old_session_id,
                 session_id,
             )
+
+        # 记录到实例属性，供 SSE 层在流结束后回传给前端
+        self.last_session_id = session_id
 
         # 1. Retrieve relevant chunks
         chunks = await self._retrieve_chunks(
@@ -295,10 +302,12 @@ class RAGEngine:
         )
 
         # 8. Save conversation turn
+        citation_dicts = [self._citation_to_dict(c) for c in citations]
         await self._save_turn(
-            session_id, user_id, question, full_response,
-            [self._citation_to_dict(c) for c in citations]
+            session_id, user_id, question, full_response, citation_dicts
         )
+        # 记录到实例属性，供 SSE 层在流结束后回传给前端
+        self.last_citations = citation_dicts
         logger.info(
             "rag turn saved: user_id=%s session_id=%s citations=%d",
             user_id,
@@ -468,6 +477,8 @@ class RAGEngine:
             "document_id": citation.document_id,
             "chunk_id": citation.chunk_id,
             "source_file": citation.source_file,
+            # 前端 Citation 类型使用 document_title 字段展示文件名
+            "document_title": citation.source_file,
             "title_chain": citation.title_chain,
             "chunk_index": citation.chunk_index,
         }

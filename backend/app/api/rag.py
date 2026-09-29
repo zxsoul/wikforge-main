@@ -173,6 +173,20 @@ async def _sse_stream(
             data = json.dumps({"type": "token", "content": token}, ensure_ascii=False)
             yield f"data: {data}\n\n"
 
+        # 流结束后回传会话 ID 和引用列表（前端据此实时渲染可点击的引用卡片）
+        if rag_engine.last_session_id:
+            sid_data = json.dumps(
+                {"type": "session_id", "session_id": rag_engine.last_session_id},
+                ensure_ascii=False,
+            )
+            yield f"data: {sid_data}\n\n"
+
+        citations_data = json.dumps(
+            {"type": "citations", "citations": rag_engine.last_citations},
+            ensure_ascii=False,
+        )
+        yield f"data: {citations_data}\n\n"
+
         # Send done event
         done_data = json.dumps({"type": "done", "content": full_response}, ensure_ascii=False)
         logger.info(
