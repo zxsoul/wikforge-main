@@ -9,8 +9,8 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # Application
-    APP_NAME: str = "Wikforge"
-    APP_VERSION: str = "0.1.0"
+    APP_NAME: str = "Wikforge · 智能工作汇报"
+    APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
     API_PREFIX: str = "/api"
 

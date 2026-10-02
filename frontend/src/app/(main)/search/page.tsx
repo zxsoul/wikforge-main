@@ -74,7 +74,7 @@ export default function SearchPage() {
       <div>
         <h1 className="text-3xl font-bold">搜索</h1>
         <p className="mt-1 text-muted-foreground">
-          搜索知识库中的文档和内容
+          搜索团队的工作材料与日报内容
         </p>
       </div>
 
@@ -167,7 +167,7 @@ export default function SearchPage() {
             <Search className="mb-3 h-10 w-10 text-muted-foreground/50" />
             <h3 className="text-lg font-medium">开始搜索</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              输入关键词搜索知识库中的文档内容
+              输入关键词搜索工作材料与日报内容
             </p>
             <p className="mt-3 text-xs text-muted-foreground">
               提示：在任意页面按{" "}

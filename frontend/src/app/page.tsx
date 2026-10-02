@@ -6,7 +6,7 @@ export default function Home() {
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-24">
       <WikforgeLogo size={80} />
       <h1 className="text-4xl font-bold tracking-tight">Wikforge</h1>
-      <p className="text-muted-foreground">企业级知识库系统</p>
+      <p className="text-muted-foreground">智能工作汇报与进度洞察系统</p>
       <div className="flex gap-3">
         <Link
           href="/login"

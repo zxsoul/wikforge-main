@@ -23,7 +23,7 @@ function LoginContent() {
           <WikforgeLogo size={48} />
         </div>
         <CardTitle className="text-2xl">登录 Wikforge</CardTitle>
-        <CardDescription>输入您的账号信息以访问知识库</CardDescription>
+        <CardDescription>输入您的账号信息以访问工作台</CardDescription>
       </CardHeader>
       <CardContent>
         {registered && (

@@ -67,9 +67,9 @@ export default function DocumentsPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold lg:text-3xl">文档管理</h1>
+          <h1 className="text-2xl font-bold lg:text-3xl">工作材料</h1>
           <p className="text-sm text-muted-foreground">
-            管理您的知识库文档
+            上传和管理团队的截图、日志与文档，AI 将据此合成日报
           </p>
         </div>
         <div className="flex items-center gap-2">

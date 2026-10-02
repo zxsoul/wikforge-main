@@ -169,7 +169,7 @@ export function ChatInterface() {
               </div>
               <h3 className="text-lg font-medium">开始对话</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                输入问题，AI 将基于知识库内容为您解答
+                输入问题，AI 将基于团队工作数据与日报为您解答
               </p>
             </div>
           )}

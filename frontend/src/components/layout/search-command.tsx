@@ -119,7 +119,7 @@ export function SearchCommand() {
     <Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
       <DialogContent className="top-[20%] translate-y-0 sm:max-w-[640px]">
         <DialogHeader className="sr-only">
-          <DialogTitle>搜索知识库</DialogTitle>
+          <DialogTitle>搜索工作材料与日报</DialogTitle>
         </DialogHeader>
         <div className="flex items-center border-b px-3 pb-3">
           <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />

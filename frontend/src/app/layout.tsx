@@ -7,8 +7,8 @@ import { ToastProvider } from "@/components/ui/toast";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Wikforge - 企业知识库",
-  description: "企业级知识库系统，支持文档管理、智能搜索和 AI 问答",
+  title: "Wikforge - 智能工作汇报与进度洞察",
+  description: "企业级智能工作汇报系统：工作材料自动沉淀、AI 日报合成、进度停滞预警与 RAG 进度问答",
 };
 
 export default function RootLayout({

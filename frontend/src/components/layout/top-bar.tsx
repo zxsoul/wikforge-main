@@ -19,7 +19,7 @@ export function TopBar() {
         onClick={openSearch}
       >
         <Search className="mr-2 h-4 w-4" />
-        <span>搜索知识库...</span>
+        <span>搜索工作材料与日报...</span>
         <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 select-none rounded border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
           ⌘K
         </kbd>

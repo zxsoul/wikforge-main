@@ -24,6 +24,7 @@ from app.api.admin_user_permissions import (
     router as admin_user_permissions_router,
 )
 from app.api.admin_users import router as admin_users_router
+from app.api.alerts import router as alerts_router
 from app.api.auth import router as auth_router
 from app.api.documents import router as documents_router
 from app.api.feedback import router as feedback_router
@@ -32,6 +33,7 @@ from app.api.ik_dict import router as ik_dict_router
 from app.api.permissions import router as permissions_router
 from app.api.qa import router as qa_router
 from app.api.rag import router as rag_router
+from app.api.reports import router as reports_router
 from app.api.search import router as search_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
@@ -50,8 +52,9 @@ def create_app() -> FastAPI:
         title=settings.APP_NAME,
         version=settings.APP_VERSION,
         description=(
-            "企业级知识库系统：文档导入、解析、清洗、向量化、复合搜索（BM25 + Dense + "
-            "Sparse + RRF）与 RAG 问答。"
+            "智能工作汇报与进度洞察系统：工作材料（截图/日志/文档）导入、解析、清洗、"
+            "向量化、复合搜索（BM25 + Dense + Sparse + RRF）、AI 日报合成、"
+            "进度停滞预警与 RAG 进度问答。"
         ),
         docs_url="/docs",
         redoc_url="/redoc",
@@ -80,6 +83,8 @@ def create_app() -> FastAPI:
     app.include_router(search_router)
     app.include_router(rag_router)
     app.include_router(qa_router)
+    app.include_router(reports_router)
+    app.include_router(alerts_router)
     app.include_router(admin_profiles_router)
     app.include_router(admin_reviews_router)
     app.include_router(admin_dictionaries_router)

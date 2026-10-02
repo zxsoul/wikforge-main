@@ -9,6 +9,8 @@ import {
   Settings,
   FolderTree,
   LayoutDashboard,
+  ClipboardList,
+  BellRing,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -33,12 +35,22 @@ const navItems = [
     icon: LayoutDashboard,
   },
   {
-    title: "文档管理",
+    title: "今日工作台",
+    href: "/workbench",
+    icon: ClipboardList,
+  },
+  {
+    title: "进度中心",
+    href: "/alerts",
+    icon: BellRing,
+  },
+  {
+    title: "工作材料",
     href: "/documents",
     icon: FileText,
   },
   {
-    title: "知识空间",
+    title: "团队空间",
     href: "/spaces",
     icon: FolderTree,
   },
@@ -48,7 +60,7 @@ const navItems = [
     icon: Search,
   },
   {
-    title: "AI 问答",
+    title: "进度问答",
     href: "/chat",
     icon: MessageSquare,
   },

@@ -2,6 +2,7 @@
 
 from app.models.base import Base, CreatedAtMixin, TimestampMixin, UUIDMixin
 from app.models.chat import ChatMessage, ChatSession
+from app.models.daily_report import DailyReport, DailyReportStatus
 from app.models.document import Document, DocumentStatus
 from app.models.document_profile import DocumentProfile
 from app.models.document_review import DocumentReview, ReviewStatus
@@ -11,6 +12,11 @@ from app.models.folder import Folder
 from app.models.parser_plugin_config import ParserPluginConfig
 from app.models.permission import AccessLevel, Permission, ResourceType
 from app.models.profile_version import ProfileVersion
+from app.models.progress_alert import (
+    AlertSeverity,
+    AlertStatus,
+    ProgressAlert,
+)
 from app.models.search_feedback import SearchFeedback
 from app.models.space import Space
 from app.models.user import User
@@ -38,4 +44,9 @@ __all__ = [
     "DocumentReview",
     "ReviewStatus",
     "SearchFeedback",
+    "DailyReport",
+    "DailyReportStatus",
+    "ProgressAlert",
+    "AlertSeverity",
+    "AlertStatus",
 ]

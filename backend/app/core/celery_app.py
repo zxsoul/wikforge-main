@@ -15,6 +15,7 @@ asynchronous workloads:
 """
 
 from celery import Celery
+from celery.schedules import crontab
 
 from app.core.config import get_settings
 
@@ -28,6 +29,7 @@ TASK_MODULES = [
     "app.tasks.pipeline",
     "app.tasks.permission_tasks",
     "app.tasks.watchdog",
+    "app.tasks.report_tasks",
 ]
 
 celery_app = Celery(
@@ -82,6 +84,20 @@ celery_app.conf.update(
         "watchdog-reap-stuck-documents": {
             "task": "watchdog.reap_stuck_documents",
             "schedule": 300.0,  # 秒
+        },
+        # 工作汇报场景：每天 18:47 (UTC+8) 自动为有上传记录的员工生成日报,
+        # 员工忘记手动生成时主管次日仍能看到全员日报。
+        # celery timezone=UTC, 故 crontab 写 UTC 10:47。
+        "reports-auto-generate-daily": {
+            "task": "reports.auto_generate_daily",
+            "schedule": crontab(hour=10, minute=47),
+        },
+        # 工作汇报场景：每天 21:23 (UTC+8) 汇总最近 7 天日报,
+        # 检测停滞/消失/风险反复的工作项,产出主管端进度预警。
+        # celery timezone=UTC, 故 crontab 写 UTC 13:23。
+        "alerts-detect-stalled-work": {
+            "task": "alerts.detect_stalled_work",
+            "schedule": crontab(hour=13, minute=23),
         },
     },
 )

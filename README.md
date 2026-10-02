@@ -1,17 +1,38 @@
 # 前言
 本项目为学习项目，开源项目来自github,上传初心是认为该项目的内容非常适合刚学习完langchian的rag的人，这个项目中基本是通过手搓实现的rag，并没有langchain中的简易封装，所以作者本人非常喜欢这个项目，不仅学到rag，还能明白各种维护操作，更加符合工程思维
 
+## 💼 产品定位：智能工作汇报与进度洞察系统
+
+Wikforge 面向 ToB 团队管理场景，解决「主管依赖 3-7 天一次的口头汇报会掌握项目进度、
+周期长、双方耗时、信息失真」的问题，把进度汇报日常化：
+
+- **员工端（零填报）**：日常工作中随手把截图、日志、文档上传到团队空间，
+  系统自动完成解析入库；每天 18:47 定时任务（或手动一键）由 AI 聚合当天
+  全部材料，合成四段式工作日报（今日完成 / 进行中与进度 / 阻塞与风险 /
+  明日计划），日报再次回流入库，形成可检索、可追溯的工作留痕。
+- **主管端（碎片时间掌控进度）**：无需召集汇报会，主管在任意空闲时刻用
+  自然语言向 RAG 问答询问「今天某部门完成了哪些内容」「某模块进度如何」，
+  多路召回 + 精排保证答案带引用、可溯源。
+- **进度预警工作流**：每晚 21:23 定时任务汇总空间内最近 7 天全员日报，
+  LLM 对比工作项的跨天进度轨迹，识别「连续多天无进展 / 从日报中消失 /
+  风险反复出现」的事项并生成预警，防止团队注意力过度聚焦而忽略进度死角。
+
+底层是一套完整的手搓 RAG 引擎（多路召回 / 精排降级 / 查询增强 / 权限隔离），
+工作汇报场景是它的落地承载，二者共用同一条检索与问答链路。
+
 ## ✨ 核心能力
 
 ```
-📄 文档解析           插件式架构: PDF / DOCX / Markdown / HTML / 源代码 + LLM 视觉兜底
+📸 材料采集           截图 / 日志 / 文档即传即入库: PDF / DOCX / Markdown / HTML / 源代码 + LLM 视觉兜底
+📝 AI 日报合成        按「员工+日期」聚合当日材料 → LLM 四段式日报 → 回流入库（工作留痕）
+🚨 进度预警           Celery Beat 每日汇总 7 天日报 → LLM 跨天进度对比 → 停滞/消失/风险预警
 🔍 复合搜索           BM25 + Dense Vector + Sparse Vector + RRF 融合 + Cross-Encoder 重排
 🎯 Profile 系统       自动匹配文档类型 (通用文本 / 中式技术规范 / 扫描版 PDF)
 💡 查询增强           LLM 改写 / HyDE 假设文档 / 多子查询分解, 三档独立开关
 🤖 流式 RAG           SSE 输出 + 引用标注 + 会话记忆, 首 token < 5s
 🔁 反馈闭环           错误模式聚合 → 优化建议 → 一键应用 → 批量重处理
 📚 领域词典           术语标准化 + 同义词扩展 + 候选词审核
-🔐 权限隔离           Pre-Filtering 在向量层与全文层同时生效, 50ms 内完成判定
+🔐 权限隔离           Pre-Filtering 在向量层与全文层同时生效；员工看自己、主管（空间创建者）看全员
 🛡️ 审核队列           解析质量评分 + 人工修正 + Profile 反向优化
 📊 后台管理           空间 / 用户 / 权限 / Profile / 词典 / 反馈 / 监控 / LLM 网关
 ```
@@ -156,6 +177,45 @@ flowchart LR
     class Review warn
 ```
 
+## 📝 日报合成与进度预警管线
+
+```mermaid
+flowchart TB
+    subgraph Employee["👤 员工端"]
+        M[截图/日志/文档<br/>即传即入库] --> AGG[按 员工+日期 聚合<br/>当日 chunk]
+        AGG --> GEN[LLM 四段式合成<br/>今日完成/进行中/风险/计划]
+        GEN --> RE[日报回流入库<br/>走完整 pipeline]
+    end
+
+    RE --> RAGQ[主管端 RAG 进度问答<br/>自然语言 + 引用溯源]
+
+    subgraph Beat["⏰ Celery Beat 定时"]
+        AUTO[18:47 自动补生成<br/>全员日报]
+        DET[21:23 汇总 7 天日报<br/>LLM 跨天进度对比]
+    end
+
+    AUTO --> GEN
+    DET --> ALERT[(progress_alerts<br/>停滞/消失/风险预警)]
+    ALERT --> PANEL[主管端预警面板<br/>确认 → 跟进闭环]
+
+    classDef emp fill:#3B82F6,stroke:#1E40AF,color:#fff
+    classDef llm fill:#8B5CF6,stroke:#5B21B6,color:#fff
+    classDef warn fill:#F97316,stroke:#9A3412,color:#fff
+
+    class M,AGG,RE emp
+    class GEN,DET llm
+    class ALERT,PANEL warn
+```
+
+**关键设计**
+
+- **幂等与防自引用**：`(space_id, user_id, report_date)` 唯一约束，同日重复生成默认返回已有
+  日报；聚合材料时排除标题为「工作日报-*」的回流文档，避免日报喂给下一次日报合成。
+- **异常降级**：日报 LLM 合成失败仅标记该日报行 failed，原始材料检索链路不受影响；
+  预警 LLM 输出做鲁棒 JSON 解析（容忍代码块包裹/噪声），解析失败当轮静默跳过。
+- **权限模型复用**：员工只能生成/查看自己的日报；主管由管理员授予空间 `write` 权限后
+  可看全员日报与预警，普通成员 `read` 权限天然被 ABAC 拦截（403）。
+
 ## 🔍 检索与问答管线
 
 ```mermaid
@@ -233,19 +293,19 @@ make reset           # 完全清理 (会丢数据!)
 wikforge/
 ├── backend/              # Python / FastAPI
 │   ├── app/
-│   │   ├── api/          # 路由层 (auth/documents/search/qa/admin_*)
-│   │   ├── services/     # 业务逻辑
-│   │   ├── tasks/        # Celery 任务 (pipeline.py 是核心)
-│   │   ├── models/       # SQLAlchemy ORM
+│   │   ├── api/          # 路由层 (auth/documents/search/qa/reports/alerts/admin_*)
+│   │   ├── services/     # 业务逻辑 (含 report_service 日报合成 / alert_service 进度预警)
+│   │   ├── tasks/        # Celery 任务 (pipeline.py 是核心; report_tasks.py 日报/预警定时任务)
+│   │   ├── models/       # SQLAlchemy ORM (含 daily_report / progress_alert)
 │   │   ├── core/         # 基础设施 (db/redis/qdrant/opensearch/minio)
 │   │   └── scripts/      # init_db / api-entrypoint
 │   ├── alembic/          # 数据库迁移
 │   ├── tests/            # 单元 + 集成测试 (2054 个)
 │   └── eval/             # 检索质量评估 (Recall@K / MRR / NDCG)
 ├── frontend/             # Next.js 14
-│   ├── src/app/          # App Router 页面
+│   ├── src/app/          # App Router 页面 (workbench 员工工作台 / alerts 主管进度中心)
 │   ├── src/components/   # UI 组件
-│   ├── src/lib/          # api-client / utils
+│   ├── src/lib/          # api-client / reports-api / utils
 │   └── src/stores/       # Zustand stores
 ├── scripts/              # verify_compose / smoke-test / backup
 ├── secrets/              # 本地凭证速查 (gitignored,不入库)
