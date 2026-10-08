@@ -245,7 +245,8 @@ class AlertService:
         解析失败 / 调用失败都返回空列表——预警是增强能力，任何异常都
         不应该影响主链路（与查询增强的「失败回退原始检索」同一哲学）。
         """
-        gateway = LLMGateway()
+        # 长输入（多天日报汇总）+ 思考型模型推理耗时可能超过默认 60s，显式放宽
+        gateway = LLMGateway(timeout=240)
         prompt = (
             "以下是某团队最近的全员工作日报，请找出进度异常的工作项："
             f"\n\n{payload}"

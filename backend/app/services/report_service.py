@@ -342,7 +342,8 @@ class DailyReportService:
         system_prompt = REPORT_SYSTEM_PROMPT.format(
             author=author, date=report_date.isoformat()
         )
-        gateway = LLMGateway()
+        # 思考型模型长输入下推理耗时可能超过默认 60s 超时，显式放宽
+        gateway = LLMGateway(timeout=180)
         prompt = (
             f"以下是 {author} 在 {report_date.isoformat()} 上传的"
             f"工作材料，请合成当日工作日报：\n\n{materials}"
