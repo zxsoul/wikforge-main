@@ -246,20 +246,33 @@ class AlertService:
         不应该影响主链路（与查询增强的「失败回退原始检索」同一哲学）。
         """
         gateway = LLMGateway()
-        try:
-            resp = await gateway.complete(
-                prompt=(
-                    "以下是某团队最近的全员工作日报，请找出进度异常的工作项："
-                    f"\n\n{payload}"
-                ),
-                system_prompt=ALERT_SYSTEM_PROMPT,
-                max_tokens=4096,
+        prompt = (
+            "以下是某团队最近的全员工作日报，请找出进度异常的工作项："
+            f"\n\n{payload}"
+        )
+        # 与日报合成同理：思考型模型推理会占用 completion 预算，
+        # 空输出时按阶梯预算重试。
+        for max_tokens in (4096, 8192, 16384):
+            try:
+                resp = await gateway.complete(
+                    prompt=prompt,
+                    system_prompt=ALERT_SYSTEM_PROMPT,
+                    max_tokens=max_tokens,
+                )
+            except LLMGatewayError as exc:
+                logger.warning("alert analysis LLM call failed: %s", exc)
+                if exc.reason in ("auth", "model_unavailable"):
+                    return []
+                continue
+            content = (resp.content or "").strip()
+            if content:
+                return self._parse_findings(content)
+            logger.warning(
+                "alert analysis empty content: max_tokens=%d finish=%s",
+                max_tokens,
+                resp.finish_reason,
             )
-        except LLMGatewayError as exc:
-            logger.warning("alert analysis LLM call failed: %s", exc)
-            return []
-
-        return self._parse_findings(resp.content or "")
+        return []
 
     @staticmethod
     def _parse_findings(content: str) -> list[dict]:

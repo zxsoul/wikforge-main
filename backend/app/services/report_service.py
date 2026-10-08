@@ -343,23 +343,40 @@ class DailyReportService:
             author=author, date=report_date.isoformat()
         )
         gateway = LLMGateway()
-        try:
-            resp = await gateway.complete(
-                prompt=(
-                    f"以下是 {author} 在 {report_date.isoformat()} 上传的"
-                    f"工作材料，请合成当日工作日报：\n\n{materials}"
-                ),
-                system_prompt=system_prompt,
-                max_tokens=2048,
+        prompt = (
+            f"以下是 {author} 在 {report_date.isoformat()} 上传的"
+            f"工作材料，请合成当日工作日报：\n\n{materials}"
+        )
+        # 思考型模型（如 kimi-k2.6）会把推理过程计入 completion tokens：
+        # 预算给小了会出现「思考耗尽预算、正文为空」的情况（finish_reason=length），
+        # 因此按阶梯预算重试，直到拿到非空正文。
+        last_error: Exception | None = None
+        for max_tokens in (2048, 8192, 16384):
+            try:
+                resp = await gateway.complete(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    max_tokens=max_tokens,
+                )
+            except LLMGatewayError as exc:
+                last_error = exc
+                # 超时/限流值得用更大预算再试一次；鉴权类错误重试无意义
+                if exc.reason in ("auth", "model_unavailable"):
+                    break
+                continue
+            content = (resp.content or "").strip()
+            if content:
+                return content
+            logger.warning(
+                "daily report synthesis empty content: max_tokens=%d finish=%s",
+                max_tokens,
+                resp.finish_reason,
             )
-        except LLMGatewayError as exc:
+        if last_error is not None:
             raise ValidationException(
-                f"日报合成失败（LLM 网关: {exc.reason}），请稍后重试"
-            ) from exc
-        content = (resp.content or "").strip()
-        if not content:
-            raise ValidationException("日报合成失败：模型返回空内容，请稍后重试")
-        return content
+                f"日报合成失败（LLM 网关: {last_error.reason}），请稍后重试"
+            ) from last_error
+        raise ValidationException("日报合成失败：模型多次返回空内容，请稍后重试")
 
     # ─── 内部：日报回流入库 ────────────────────────────────────────────
 
